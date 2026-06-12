@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "./supabase";
 
 const C = {
   bg:'#0B0B0F', bgCard:'#101828', bgSub:'#1F2937', gold:'#C9A96A',
@@ -97,7 +98,7 @@ function Timer90({onClose,onComplete}){
       <p style={{color:C.textSub,fontSize:14,margin:'0 0 4px'}}>Pare de negociar.</p>
       <p style={{color:C.textSub,fontSize:14,margin:0}}>Faça a primeira ação.</p>
     </div>
-    {done?<Btn label="INICIAR AÇÃO DO GUERREIRO ⚔️" onClick={()=>{onComplete();onClose()}}/>
+    {done?<Btn label="INICIAR AÇÃO DO GUERREIRO ⚔️" onClick={onComplete}/>
       :<button onClick={onClose} style={{background:'none',border:'none',color:C.textSub,fontSize:12,cursor:'pointer',fontFamily:'monospace'}}>cancelar</button>}
   </div>;
 }
@@ -137,8 +138,14 @@ function TabHoje({state,setState,toast}){
   // contagem de fugas pendentes para o cabeçalho do detector
   const pendingCount=ESCAPES.filter(e=>!state.fixedEscapes.includes(e.id)).length;
 
+  const handleTimerComplete = () => {
+    setShowTimer(false);
+    setState(s => ({ ...s, opState: 'exec' }));
+    toast('Guerreiro Ativado! Menos análise, mais ação.');
+  };
+
   return <div style={{padding:'14px 16px 100px',display:'flex',flexDirection:'column',gap:8}}>
-    {showTimer&&<Timer90 onClose={()=>{setShowTimer(false);setOp(null)}} onComplete={()=>setShowTimer(false)}/>}
+    {showTimer&&<Timer90 onClose={()=>{setShowTimer(false);setOp(null)}} onComplete={handleTimerComplete}/>}
 
     {/* MODAL MISSÃO */}
     {showModal&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',
@@ -193,7 +200,12 @@ function TabHoje({state,setState,toast}){
         <div style={{padding:'9px 12px',background:'rgba(201,169,106,0.08)',border:'1px solid rgba(201,169,106,0.25)',
           borderRadius:8,fontSize:11,color:C.gold,fontFamily:'monospace'}}>⏳ Executando...</div>
         <Btn label="✓ MARCAR COMO CONCLUÍDA" variant="secondary" full onClick={()=>{
-          setState(s=>({...s,action:{...s.action,status:'done'},flags:{...s.flags,acao:true,naoZerou:true},streak:s.streak+(s.streak===0?1:0)}));
+          setState(s=>({
+            ...s,
+            action:{...s.action,status:'done'},
+            flags:{...s.flags,acao:true,naoZerou:true},
+            streak: s.flags.naoZerou ? s.streak : s.streak + 1
+          }));
           toast('Missão executada. +3 pontos.');}}/>
       </div>}
       {state.action?.status==='done'&&
@@ -248,7 +260,16 @@ function TabHoje({state,setState,toast}){
                 color:C.yellow}}>{o}</span>)}
         </div>
         {state.tiredChip&&<button
-          onClick={()=>{setFlag('naoZerou');setState(s=>({...s,streak:Math.max(s.streak,1),opState:null,tiredChip:null}));toast('Dia protegido.');}}
+          onClick={()=>{
+            setState(s => ({
+              ...s,
+              flags: { ...s.flags, naoZerou: true },
+              streak: s.flags.naoZerou ? s.streak : s.streak + 1,
+              opState: null,
+              tiredChip: null
+            }));
+            toast('Dia protegido.');
+          }}
           style={{width:'100%',height:36,borderRadius:8,background:C.yellow,border:'none',
             color:'#0B0B0F',fontFamily:'monospace',fontWeight:700,fontSize:11,cursor:'pointer'}}>
           NÃO ZERAR HOJE
@@ -665,6 +686,7 @@ export default function App(){
   const [toastMsg,setToastMsg]=useState(null);
   const toast=m=>{setToastMsg(m);setTimeout(()=>setToastMsg(null),2200);};
 
+  const [loading,setLoading]=useState(true);
   const [state,setState]=useState({
     mission:null,
     action:null,
@@ -680,6 +702,99 @@ export default function App(){
     corrDone:false,
   });
 
+  const getLocalDateString = () => {
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - offset * 60 * 1000);
+    return localDate.toISOString().split('T')[0];
+  };
+
+  const getDaysDifference = (dateStr1, dateStr2) => {
+    const d1 = new Date(dateStr1 + 'T00:00:00');
+    const d2 = new Date(dateStr2 + 'T00:00:00');
+    const diffTime = Math.abs(d2 - d1);
+    return Math.round(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  useEffect(() => {
+    async function loadState() {
+      try {
+        const todayStr = getLocalDateString();
+        const { data, error } = await supabase
+          .from('guerreiro_daily_states')
+          .select('state')
+          .eq('date', todayStr)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data && data.state) {
+          setState(data.state);
+        } else {
+          // Busca o dia anterior mais recente para herdar o streak e painel da vida
+          const { data: prevData, error: prevError } = await supabase
+            .from('guerreiro_daily_states')
+            .select('date, state')
+            .lt('date', todayStr)
+            .order('date', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (prevError) throw prevError;
+
+          if (prevData && prevData.state) {
+            const diff = getDaysDifference(prevData.date, todayStr);
+            const yesterdayWasSuccessful = prevData.state.flags?.naoZerou || prevData.state.flags?.acao;
+            const newStreak = (diff === 1 && yesterdayWasSuccessful) ? (prevData.state.streak || 0) : 0;
+
+            setState({
+              mission: null,
+              action: null,
+              opState: null,
+              tiredChip: null,
+              streak: newStreak,
+              flags: { missao: false, acao: false, fuga: false, eus: false, naoZerou: false },
+              fixedEscapes: [],
+              eus: { passado: '', presente: '', futuro: '' },
+              eusSaved: false,
+              conversion: { consumidos: 0, aplicados: 0 },
+              panel: prevData.state.panel || { fe: 3, familia: 3, saude: 3, estudo: 3, empresa: 3 },
+              corrDone: false,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados do Supabase:', err);
+        toast('Erro ao conectar ao banco de dados.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadState();
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const todayStr = getLocalDateString();
+    const timeoutId = setTimeout(async () => {
+      try {
+        const { error } = await supabase
+          .from('guerreiro_daily_states')
+          .upsert({
+            date: todayStr,
+            state: state,
+            updated_at: new Date().toISOString()
+          });
+        if (error) throw error;
+      } catch (err) {
+        console.error('Erro ao salvar dados no Supabase:', err);
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [state, loading]);
+
   const tabs=[{id:'hoje',icon:'⚡',l:'HOJE'},{id:'identidade',icon:'📜',l:'IDENTIDADE'},{id:'evolucao',icon:'📈',l:'EVOLUÇÃO'}];
   const ti=tabs.find(t=>t.id===tab);
 
@@ -689,6 +804,78 @@ export default function App(){
     }
     setTab(id);
   };
+
+  if (loading) {
+    return (
+      <div style={{
+        fontFamily: 'system-ui,sans-serif',
+        background: C.bg,
+        minHeight: '100vh',
+        maxWidth: 480,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: C.text,
+        padding: 24,
+        boxSizing: 'border-box'
+      }}>
+        <div style={{
+          position: 'relative',
+          width: 80,
+          height: 80,
+          marginBottom: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            border: `3px solid ${C.bgSub}`,
+            borderRadius: '50%'
+          }} />
+          <div style={{
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            border: `3px solid transparent`,
+            borderTopColor: C.gold,
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <span style={{ fontSize: 24 }}>⚔️</span>
+        </div>
+        <div style={{
+          fontSize: 10,
+          fontFamily: 'monospace',
+          color: C.gold,
+          letterSpacing: '0.25em',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+          textAlign: 'center'
+        }}>
+          Sincronizando
+        </div>
+        <div style={{
+          fontSize: 16,
+          fontFamily: 'Georgia,serif',
+          color: C.text,
+          textAlign: 'center'
+        }}>
+          Comando Central
+        </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return <div style={{fontFamily:'system-ui,sans-serif',background:C.bg,minHeight:'100vh',
     maxWidth:480,margin:'0 auto',display:'flex',flexDirection:'column',color:C.text,position:'relative'}}>
