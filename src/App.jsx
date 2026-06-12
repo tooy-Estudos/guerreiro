@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 const C = {
@@ -104,6 +104,53 @@ function Timer90({onClose,onComplete}){
 }
 
 // ─── ABA HOJE ───
+// ─── COMPONENTE SPOTLIGHT CARD (FILOSOFIA REACT BITS) ───
+function SpotlightCard({ children, style = {}, className = "" }) {
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const [isHovered, setIsHovered] = useState(false);
+  const cardRef = useRef(null);
+
+  const handleMouseMove = (e) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    setCoords({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        ...style
+      }}
+      className={className}
+    >
+      {isHovered && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background: `radial-gradient(280px circle at ${coords.x}px ${coords.y}px, rgba(201, 169, 106, 0.08), transparent 80%)`,
+            zIndex: 1
+          }}
+        />
+      )}
+      <div style={{ position: 'relative', zIndex: 2, height: '100%' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── ABA HOJE ───
 function TabHoje({state,setState,toast}){
   const [showModal,setShowModal]=useState(false);
   const [mTitulo,setMTitulo]=useState('');
@@ -146,7 +193,7 @@ function TabHoje({state,setState,toast}){
     toast('Guerreiro Ativado! Menos análise, mais ação.');
   };
 
-  return <div style={{padding:'14px 16px 100px',display:'flex',flexDirection:'column',gap:8}}>
+  return <div className="two-col-grid" style={{padding:'14px 16px 100px'}}>
     {showTimer&&<Timer90 onClose={()=>{setShowTimer(false);setOp(null)}} onComplete={handleTimerComplete}/>}
 
     {/* MODAL MISSÃO */}
@@ -193,206 +240,214 @@ function TabHoje({state,setState,toast}){
       </div>
     </div>}
 
-    {/* 1. MISSÃO CRÍTICA — compacta, -25% altura */}
-    {state.mission?
-      <div style={{background:'linear-gradient(135deg,#101828,#0D1F35)',border:`1.5px solid ${C.gold}`,
-        borderRadius:16,padding:'14px 16px',position:'relative',overflow:'hidden'}}>
-        <div style={{position:'absolute',top:-20,right:-20,width:70,height:70,borderRadius:'50%',background:'rgba(201,169,106,0.07)'}}/>
-        <Label text="⚡ MISSÃO CRÍTICA" color={C.gold}/>
-        <div style={{fontSize:22,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.15,marginBottom:10}}>
-          {state.mission.titulo}
-        </div>
-        <div style={{display:'flex',gap:6}}>
-          <div style={{display:'inline-flex',gap:6,background:'rgba(201,169,106,0.12)',
-            border:'1px solid rgba(201,169,106,0.25)',borderRadius:7,padding:'5px 10px'}}>
-            <span style={{fontSize:10,color:C.gold,fontFamily:'monospace'}}>🎯 {state.mission.prova}</span>
+    {/* Coluna da Esquerda (Foco/Execução) */}
+    <div style={{display:'flex', flexDirection:'column', gap:12}}>
+      {/* 1. MISSÃO CRÍTICA */}
+      {state.mission?
+        <SpotlightCard style={{background:'linear-gradient(135deg,#101828,#0D1F35)',border:`1.5px solid ${C.gold}`,
+          borderRadius:16,padding:'14px 16px'}}>
+          <div style={{position:'absolute',top:-20,right:-20,width:70,height:70,borderRadius:'50%',background:'rgba(201,169,106,0.07)'}}/>
+          <Label text="⚡ MISSÃO CRÍTICA" color={C.gold}/>
+          <div style={{fontSize:22,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.15,marginBottom:10}}>
+            {state.mission.titulo}
           </div>
-          {state.mission.area && (
-            <div style={{display:'inline-flex',gap:6,background:C.bgSub,
-              border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px'}}>
-              <span style={{fontSize:10,color:C.textSub,fontFamily:'monospace'}}>
-                {PANEL_AREAS.find(a=>a.key===state.mission.area)?.icon} {PANEL_AREAS.find(a=>a.key===state.mission.area)?.label.toUpperCase()}
-              </span>
+          <div style={{display:'flex',gap:6}}>
+            <div style={{display:'inline-flex',gap:6,background:'rgba(201,169,106,0.12)',
+              border:'1px solid rgba(201,169,106,0.25)',borderRadius:7,padding:'5px 10px'}}>
+              <span style={{fontSize:10,color:C.gold,fontFamily:'monospace'}}>🎯 {state.mission.prova}</span>
             </div>
-          )}
-        </div>
-      </div>
-      :<div onClick={()=>setShowModal(true)} style={{background:C.bgCard,border:`1.5px dashed ${C.gold}4D`,
-        borderRadius:16,padding:'14px 16px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:'pointer',minHeight:96}}>
-        <Label text="⚡ MISSÃO CRÍTICA" color={C.gold}/>
-        <div style={{fontSize:19,fontFamily:'Georgia,serif',color:C.textSub,marginBottom:8}}>Qual é sua missão hoje?</div>
-        <div style={{fontSize:11,color:C.gold,fontFamily:'monospace'}}>Toque para definir →</div>
-      </div>}
-
-    {/* 2. AÇÃO DO GUERREIRO — imediatamente abaixo da missão */}
-    <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,padding:'14px 16px'}}>
-      <Label text="⚔️ AÇÃO DO GUERREIRO"/>
-      {!state.mission
-        ?<div style={{fontSize:13,color:C.textSub,marginBottom:12}}>Defina sua missão primeiro.</div>
-        :<>
-          <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6,lineHeight:1.4}}>{state.action?.desc}</div>
-          <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',marginBottom:12}}>⏱ 25 min</div>
-        </>}
-      {state.mission&&state.action?.status==='pendente'&&
-        <Btn label="⚡ EXECUTAR AGORA" full onClick={()=>setState(s=>({...s,action:{...s.action,status:'exec'}}))}/>}
-      {state.action?.status==='exec'&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
-        <div style={{padding:'9px 12px',background:'rgba(201,169,106,0.08)',border:'1px solid rgba(201,169,106,0.25)',
-          borderRadius:8,fontSize:11,color:C.gold,fontFamily:'monospace'}}>⏳ Executando...</div>
-        <Btn label="✓ MARCAR COMO CONCLUÍDA" variant="secondary" full onClick={()=>{
-          setState(s=>({
-            ...s,
-            action:{...s.action,status:'done'},
-            flags:{...s.flags,acao:true,naoZerou:true},
-            streak: s.flags.naoZerou ? s.streak : s.streak + 1,
-            panel: s.mission?.area ? { ...s.panel, [s.mission.area]: 3 } : s.panel
-          }));
-          toast(state.mission?.area ? `Missão executada. Área ${PANEL_AREAS.find(a=>a.key===state.mission.area)?.label} no máximo!` : 'Missão executada. +3 pontos.');}}/>
-      </div>}
-      {state.action?.status==='done'&&
-        <div style={{color:C.green,fontSize:13,fontFamily:'monospace',fontWeight:700}}>✓ CONCLUÍDA</div>}
-      {!state.mission&&
-        <Btn label="⚡ EXECUTAR AGORA" full disabled/>}
-    </div>
-
-    {/* 3. RISCO PRINCIPAL — substitui Diagnóstico do Dia */}
-    {!actionDone&&pendingEscape&&<div style={{background:'rgba(245,158,11,0.07)',
-      border:'1px solid rgba(245,158,11,0.18)',borderRadius:10,padding:'10px 14px',
-      display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
-      <div>
-        <div style={{fontSize:9,fontFamily:'monospace',color:C.yellow,letterSpacing:'0.15em',marginBottom:3}}>
-          RISCO PRINCIPAL
-        </div>
-        <div style={{fontSize:13,color:C.text,fontWeight:600}}>{pendingEscape.label}</div>
-      </div>
-      <div style={{fontSize:11,color:C.textSub,textAlign:'right',flexShrink:0}}>
-        Execute 5 min agora.
-      </div>
-    </div>}
-
-    {/* 4. ESTADOS OPERACIONAIS — chips compactos */}
-    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-      <div style={{display:'flex',gap:6}}>
-        {[{id:'exec',l:'EXECUÇÃO',c:C.green},{id:'trav',l:'TRAVADO',c:C.red},{id:'cans',l:'CANSAÇO',c:C.yellow}].map(s=>{
-          const a=opState===s.id;
-          return <button key={s.id}
-            onClick={()=>{if(s.id==='trav'){setOp('trav');setShowTimer(true)}else setOp(s.id)}}
-            style={{flex:1,height:32,borderRadius:8,border:`1px solid ${a?s.c:C.border}`,
-              background:a?`${s.c}18`:'transparent',color:a?s.c:C.textSub,
-              fontFamily:'monospace',fontWeight:700,fontSize:9,letterSpacing:'0.04em',cursor:'pointer'}}>
-            {s.l}
-          </button>;
-        })}
-      </div>
-      {opState==='exec'&&<div style={{background:'rgba(34,197,94,0.08)',border:'1px solid rgba(34,197,94,0.12)',
-        borderRadius:8,padding:'8px 12px'}}>
-        <div style={{fontSize:12,color:C.textSub,fontStyle:'italic'}}>"Menos análise. Mais ação."</div>
-      </div>}
-      {opState==='cans'&&<div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.12)',
-        borderRadius:8,padding:'12px'}}>
-        <div style={{fontSize:9,fontFamily:'monospace',color:C.yellow,letterSpacing:'0.15em',marginBottom:6}}>MODO MÍNIMO</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:10}}>Hoje não precisa ser perfeito. Só não pode zerar.</div>
-        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
-          {['1 questão','1 página','5 minutos','1 oração'].map(o=>
-            <span key={o} onClick={()=>setState(s=>({...s,tiredChip:o}))}
-              style={{padding:'5px 10px',borderRadius:7,fontSize:11,cursor:'pointer',fontFamily:'monospace',
-                border:`1px solid ${state.tiredChip===o?C.yellow:'rgba(245,158,11,0.25)'}`,
-                background:state.tiredChip===o?'rgba(245,158,11,0.2)':'rgba(245,158,11,0.07)',
-                color:C.yellow}}>{o}</span>)}
-        </div>
-        {state.tiredChip&&<button
-          onClick={()=>{
-            setState(s => ({
-              ...s,
-              flags: { ...s.flags, naoZerou: true },
-              streak: s.flags.naoZerou ? s.streak : s.streak + 1,
-              opState: null,
-              tiredChip: null
-            }));
-            toast('Dia protegido.');
-          }}
-          style={{width:'100%',height:36,borderRadius:8,background:C.yellow,border:'none',
-            color:'#0B0B0F',fontFamily:'monospace',fontWeight:700,fontSize:11,cursor:'pointer'}}>
-          NÃO ZERAR HOJE
-        </button>}
-      </div>}
-    </div>
-
-    {/* 5. SCORE + STREAK — ocultos até conclusão */}
-    {actionDone
-      ?<div style={{display:'flex',gap:8}}>
-          <div style={{flex:1,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,padding:14}}>
-            <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.1em',marginBottom:4}}>SCORE DO DIA</div>
-            <div style={{fontFamily:'monospace',fontSize:28,fontWeight:700,color:scoreColor(score),lineHeight:1}}>{score}</div>
-            <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,marginTop:3}}>{scoreLabel(score)}</div>
+            {state.mission.area && (
+              <div style={{display:'inline-flex',gap:6,background:C.bgSub,
+                border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px'}}>
+                <span style={{fontSize:10,color:C.textSub,fontFamily:'monospace'}}>
+                  {PANEL_AREAS.find(a=>a.key===state.mission.area)?.icon} {PANEL_AREAS.find(a=>a.key===state.mission.area)?.label.toUpperCase()}
+                </span>
+              </div>
+            )}
           </div>
-          <div style={{flex:1,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,padding:14}}>
-            <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.1em',marginBottom:4}}>SEM ZERAR</div>
-            <div style={{fontFamily:'monospace',fontSize:28,fontWeight:700,color:C.gold,lineHeight:1}}>
-              {state.streak}<span style={{fontSize:12,color:C.textSub}}>/30</span>
-            </div>
-            <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,marginTop:3}}>Meta atual</div>
-          </div>
-        </div>
-      :<div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,
-          padding:'11px 16px',textAlign:'center'}}>
-          <span style={{fontSize:12,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.06em'}}>
-            Pronto para começar
-          </span>
+        </SpotlightCard>
+        :<div onClick={()=>setShowModal(true)} style={{background:C.bgCard,border:`1.5px dashed ${C.gold}4D`,
+          borderRadius:16,padding:'14px 16px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:'pointer',minHeight:96}}>
+          <Label text="⚡ MISSÃO CRÍTICA" color={C.gold}/>
+          <div style={{fontSize:19,fontFamily:'Georgia,serif',color:C.textSub,marginBottom:8}}>Qual é sua missão hoje?</div>
+          <div style={{fontSize:11,color:C.gold,fontFamily:'monospace'}}>Toque para definir →</div>
         </div>}
 
-    {/* 6. DETECTOR DE FUGA — colapsado, cabeçalho com contagem de pendências */}
-    <div>
-      <button onClick={()=>setEscapeOpen(o=>!o)} style={{width:'100%',display:'flex',
-        justifyContent:'space-between',alignItems:'center',background:'transparent',
-        border:'none',cursor:'pointer',padding:'4px 0',marginBottom:escapeOpen?6:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <span style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.2em'}}>🔍 DETECTOR DE FUGA</span>
-          {pendingCount>0&&<span style={{fontSize:9,fontFamily:'monospace',color:C.red,
-            background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.25)',
-            borderRadius:5,padding:'2px 6px'}}>{pendingCount} pendente{pendingCount>1?'s':''}</span>}
-          {pendingCount===0&&<span style={{fontSize:9,fontFamily:'monospace',color:C.green}}>✓ ok</span>}
+      {/* 2. AÇÃO DO GUERREIRO */}
+      <SpotlightCard style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,padding:'14px 16px'}}>
+        <Label text="⚔️ AÇÃO DO GUERREIRO"/>
+        {!state.mission
+          ?<div style={{fontSize:13,color:C.textSub,marginBottom:12}}>Defina sua missão primeiro.</div>
+          :<>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6,lineHeight:1.4}}>{state.action?.desc}</div>
+            <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',marginBottom:12}}>⏱ 25 min</div>
+          </>}
+        {state.mission&&state.action?.status==='pendente'&&
+          <Btn label="⚡ EXECUTAR AGORA" full onClick={()=>setState(s=>({...s,action:{...s.action,status:'exec'}}))}/>}
+        {state.action?.status==='exec'&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{padding:'9px 12px',background:'rgba(201,169,106,0.08)',border:'1px solid rgba(201,169,106,0.25)',
+            borderRadius:8,fontSize:11,color:C.gold,fontFamily:'monospace'}}>⏳ Executando...</div>
+          <Btn label="✓ MARCAR COMO CONCLUÍDA" variant="secondary" full onClick={()=>{
+            setState(s=>({
+              ...s,
+              action:{...s.action,status:'done'},
+              flags:{...s.flags,acao:true,naoZerou:true},
+              streak: s.flags.naoZerou ? s.streak : s.streak + 1,
+              panel: s.mission?.area ? { ...s.panel, [s.mission.area]: 3 } : s.panel
+            }));
+            toast(state.mission?.area ? `Missão executada. Área ${PANEL_AREAS.find(a=>a.key===state.mission.area)?.label} no máximo!` : 'Missão executada. +3 pontos.');}}/>
+        </div>}
+        {state.action?.status==='done'&&
+          <div style={{color:C.green,fontSize:13,fontFamily:'monospace',fontWeight:700}}>✓ CONCLUÍDA</div>}
+        {!state.mission&&
+          <Btn label="⚡ EXECUTAR AGORA" full disabled/>}
+      </SpotlightCard>
+
+      {/* 3. ESTADOS OPERACIONAIS */}
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        <div style={{display:'flex',gap:6}}>
+          {[{id:'exec',l:'EXECUÇÃO',c:C.green},{id:'trav',l:'TRAVADO',c:C.red},{id:'cans',l:'CANSAÇO',c:C.yellow}].map(s=>{
+            const a=opState===s.id;
+            return <button key={s.id}
+              onClick={()=>{if(s.id==='trav'){setOp('trav');setShowTimer(true)}else setOp(s.id)}}
+              style={{flex:1,height:32,borderRadius:8,border:`1px solid ${a?s.c:C.border}`,
+                background:a?`${s.c}18`:'transparent',color:a?s.c:C.textSub,
+                fontFamily:'monospace',fontWeight:700,fontSize:9,letterSpacing:'0.04em',cursor:'pointer'}}>
+              {s.l}
+            </button>;
+          })}
         </div>
-        <span style={{fontSize:11,fontFamily:'monospace',color:C.gold}}>{escapeOpen?'▲':'▼'}</span>
-      </button>
-      {escapeOpen&&<div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-        {ESCAPES.map((e,i)=>{
-          const fixed=state.fixedEscapes.includes(e.id);
-          const exp=activeEscape===e.id;
-          return <div key={e.id}>
-            {i>0&&<div style={{height:1,background:C.border}}/>}
-            <button onClick={()=>!fixed&&setActiveEscape(exp?null:e.id)}
-              style={{width:'100%',height:44,padding:'0 14px',display:'flex',
-                justifyContent:'space-between',alignItems:'center',background:'transparent',
-                border:'none',cursor:fixed?'default':'pointer'}}>
-              <span style={{fontSize:12,color:fixed?C.green:C.textSub}}>{fixed?'✓ ':''}{e.label}</span>
-              <span style={{fontSize:14,fontFamily:'monospace',color:fixed?C.green:C.gold}}>
-                {fixed?'✓':exp?'−':'+'}
-              </span>
-            </button>
-            {exp&&!fixed&&<div style={{padding:'12px 14px 14px',background:C.bgSub}}>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.red,letterSpacing:'0.15em',marginBottom:3}}>DIAGNÓSTICO</div>
-              <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.5}}>{e.diag}</div>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:3}}>VERDADE</div>
-              <div style={{fontSize:12,color:C.textSub,marginBottom:10}}>{e.verdade}</div>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:3}}>AÇÃO CORRETIVA</div>
-              <div style={{fontSize:12,color:C.text,marginBottom:12}}>{e.acao}</div>
-              <Btn label={e.btn} variant="secondary" full onClick={()=>{
-                setState(s=>({
-                  ...s,
-                  fixedEscapes:[...s.fixedEscapes,e.id],
-                  flags:{...s.flags,fuga:true},
-                  action: { desc: `[CORREÇÃO DE FUGA] ${e.acao}`, status: 'pendente' }
-                }));
-                setActiveEscape(null);
-                toast('Fuga corrigida. Ação injetada no Guerreiro!');
-              }}/>
-            </div>}
-          </div>;
-        })}
+        {opState==='exec'&&<div style={{background:'rgba(34,197,94,0.08)',border:'1px solid rgba(34,197,94,0.12)',
+          borderRadius:8,padding:'8px 12px'}}>
+          <div style={{fontSize:12,color:C.textSub,fontStyle:'italic'}}>"Menos análise. Mais ação."</div>
+        </div>}
+        {opState==='cans'&&<div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.12)',
+          borderRadius:8,padding:'12px'}}>
+          <div style={{fontSize:9,fontFamily:'monospace',color:C.yellow,letterSpacing:'0.15em',marginBottom:6}}>MODO MÍNIMO</div>
+          <div style={{fontSize:12,color:C.textSub,marginBottom:10}}>Hoje não precisa ser perfeito. Só não pode zerar.</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+            {['1 questão','1 página','5 minutos','1 oração'].map(o=>
+              <span key={o} onClick={()=>setState(s=>({...s,tiredChip:o}))}
+                style={{padding:'5px 10px',borderRadius:7,fontSize:11,cursor:'pointer',fontFamily:'monospace',
+                  border:`1px solid ${state.tiredChip===o?C.yellow:'rgba(245,158,11,0.25)'}`,
+                  background:state.tiredChip===o?'rgba(245,158,11,0.2)':'rgba(245,158,11,0.07)',
+                  color:C.yellow}}>{o}</span>)}
+          </div>
+          {state.tiredChip&&<button
+            onClick={()=>{
+              setState(s => ({
+                ...s,
+                flags: { ...s.flags, naoZerou: true },
+                streak: s.flags.naoZerou ? s.streak : s.streak + 1,
+                opState: null,
+                tiredChip: null
+              }));
+              toast('Dia protegido.');
+            }}
+            style={{width:'100%',height:36,borderRadius:8,background:C.yellow,border:'none',
+              color:'#0B0B0F',fontFamily:'monospace',fontWeight:700,fontSize:11,cursor:'pointer'}}>
+            NÃO ZERAR HOJE
+          </button>}
+        </div>}
+      </div>
+    </div>
+
+    {/* Coluna da Direita (Status/Resiliência) */}
+    <div style={{display:'flex', flexDirection:'column', gap:12}}>
+      {/* 4. RISCO PRINCIPAL */}
+      {!actionDone&&pendingEscape&&<div style={{background:'rgba(245,158,11,0.07)',
+        border:'1px solid rgba(245,158,11,0.18)',borderRadius:10,padding:'10px 14px',
+        display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+        <div>
+          <div style={{fontSize:9,fontFamily:'monospace',color:C.yellow,letterSpacing:'0.15em',marginBottom:3}}>
+            RISCO PRINCIPAL
+          </div>
+          <div style={{fontSize:13,color:C.text,fontWeight:600}}>{pendingEscape.label}</div>
+        </div>
+        <div style={{fontSize:11,color:C.textSub,textAlign:'right',flexShrink:0}}>
+          Execute 5 min agora.
+        </div>
       </div>}
+
+      {/* 5. SCORE + STREAK */}
+      {actionDone
+        ?<div style={{display:'flex',gap:8}}>
+            <div style={{flex:1,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,padding:14}}>
+              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.1em',marginBottom:4}}>SCORE DO DIA</div>
+              <div style={{fontFamily:'monospace',fontSize:28,fontWeight:700,color:scoreColor(score),lineHeight:1}}>{score}</div>
+              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,marginTop:3}}>{scoreLabel(score)}</div>
+            </div>
+            <div style={{flex:1,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,padding:14}}>
+              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.1em',marginBottom:4}}>SEM ZERAR</div>
+              <div style={{fontFamily:'monospace',fontSize:28,fontWeight:700,color:C.gold,lineHeight:1}}>
+                {state.streak}<span style={{fontSize:12,color:C.textSub}}>/30</span>
+              </div>
+              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,marginTop:3}}>Meta atual</div>
+            </div>
+          </div>
+        :<div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,
+            padding:'11px 16px',textAlign:'center'}}>
+            <span style={{fontSize:12,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.06em'}}>
+              Pronto para começar
+            </span>
+          </div>}
+
+      {/* 6. DETECTOR DE FUGA */}
+      <div>
+        <button onClick={()=>setEscapeOpen(o=>!o)} style={{width:'100%',display:'flex',
+          justifyContent:'space-between',alignItems:'center',background:'transparent',
+          border:'none',cursor:'pointer',padding:'4px 0',marginBottom:escapeOpen?6:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.2em'}}>🔍 DETECTOR DE FUGA</span>
+            {pendingCount>0&&<span style={{fontSize:9,fontFamily:'monospace',color:C.red,
+              background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.25)',
+              borderRadius:5,padding:'2px 6px'}}>{pendingCount} pendente{pendingCount>1?'s':''}</span>}
+            {pendingCount===0&&<span style={{fontSize:9,fontFamily:'monospace',color:C.green}}>✓ ok</span>}
+          </div>
+          <span style={{fontSize:11,fontFamily:'monospace',color:C.gold}}>{escapeOpen?'▲':'▼'}</span>
+        </button>
+        {escapeOpen&&<div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+          {ESCAPES.map((e,i)=>{
+            const fixed=state.fixedEscapes.includes(e.id);
+            const exp=activeEscape===e.id;
+            return <div key={e.id}>
+              {i>0&&<div style={{height:1,background:C.border}}/>}
+              <button onClick={()=>!fixed&&setActiveEscape(exp?null:e.id)}
+                style={{width:'100%',height:44,padding:'0 14px',display:'flex',
+                  justifyContent:'space-between',alignItems:'center',background:'transparent',
+                  border:'none',cursor:fixed?'default':'pointer'}}>
+                <span style={{fontSize:12,color:fixed?C.green:C.textSub}}>{fixed?'✓ ':''}{e.label}</span>
+                <span style={{fontSize:14,fontFamily:'monospace',color:fixed?C.green:C.gold}}>
+                  {fixed?'✓':exp?'−':'+'}
+                </span>
+              </button>
+              {exp&&!fixed&&<div style={{padding:'12px 14px 14px',background:C.bgSub}}>
+                <div style={{fontSize:9,fontFamily:'monospace',color:C.red,letterSpacing:'0.15em',marginBottom:3}}>DIAGNÓSTICO</div>
+                <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.5}}>{e.diag}</div>
+                <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:3}}>VERDADE</div>
+                <div style={{fontSize:12,color:C.textSub,marginBottom:10}}>{e.verdade}</div>
+                <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:3}}>AÇÃO CORRETIVA</div>
+                <div style={{fontSize:12,color:C.text,marginBottom:12}}>{e.acao}</div>
+                <Btn label={e.btn} variant="secondary" full onClick={()=>{
+                  setState(s=>({
+                    ...s,
+                    fixedEscapes:[...s.fixedEscapes,e.id],
+                    flags:{...s.flags,fuga:true},
+                    action: { desc: `[CORREÇÃO DE FUGA] ${e.acao}`, status: 'pendente' }
+                  }));
+                  setActiveEscape(null);
+                  toast('Fuga corrigida. Ação injetada no Guerreiro!');
+                }}/>
+              </div>}
+            </div>;
+          })}
+        </div>}
+      </div>
     </div>
   </div>;
 }
+
+
 
 // ─── ABA IDENTIDADE ───
 function TabIdentidade({state,setState,toast}){
@@ -409,7 +464,7 @@ function TabIdentidade({state,setState,toast}){
   const prevArt=()=>setArtIdx(i=>(i-1+CONSTITUTION.length)%CONSTITUTION.length);
   const nextArt=()=>setArtIdx(i=>(i+1)%CONSTITUTION.length);
 
-  return <div style={{padding:'20px 16px 100px',display:'flex',flexDirection:'column',gap:14}}>
+  return <div className="two-col-grid" style={{padding:'20px 16px 100px'}}>
 
     {/* MODAL CONFRONTAR */}
     {showConfrontar&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',
@@ -433,117 +488,123 @@ function TabIdentidade({state,setState,toast}){
       </div>
     </div>}
 
-    {/* 1. MEMÓRIA DE GUERRA — card único + navegação */}
-    <div style={{background:'linear-gradient(135deg,#0D0D0D,#1A1206)',
-      border:'1.5px solid rgba(201,169,106,0.4)',borderRadius:20,padding:20}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em'}}>🏆 MEMÓRIA DE GUERRA</div>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub}}>{warIdx+1}/{WAR_CARDS.length}</div>
-      </div>
-
-      <div style={{fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,marginBottom:4}}>{wcard.titulo}</div>
-      <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:16}}>
-        {wcard.cat.toUpperCase()}
-      </div>
-
-      <div style={{height:1,background:C.border,marginBottom:16}}/>
-
-      <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:6}}>ISTO PROVA</div>
-      <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:14}}>{wcard.prova}</div>
-
-      <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:4}}>IDENTIDADE</div>
-      <div style={{fontSize:14,color:C.gold,marginBottom:14,fontWeight:600}}>{wcard.identidade}</div>
-
-      <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:4}}>ATITUDE DE HOJE</div>
-      <div style={{fontSize:14,color:C.text,lineHeight:1.4,marginBottom:20}}>{wcard.atitude}</div>
-
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <button onClick={prevWar} style={{background:'transparent',border:`1px solid ${C.border}`,
-          borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-          ← anterior
-        </button>
-        <div style={{display:'flex',gap:4}}>
-          {WAR_CARDS.map((_,i)=><div key={i} style={{width:6,height:6,borderRadius:'50%',
-            background:i===warIdx?C.gold:C.border}}/>)}
+    {/* Coluna da Esquerda (Identidade/Histórico) */}
+    <div style={{display:'flex', flexDirection:'column', gap:14}}>
+      {/* 1. MEMÓRIA DE GUERRA — card único + navegação */}
+      <SpotlightCard style={{background:'linear-gradient(135deg,#0D0D0D,#1A1206)',
+        border:'1.5px solid rgba(201,169,106,0.4)',borderRadius:20,padding:20}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em'}}>🏆 MEMÓRIA DE GUERRA</div>
+          <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub}}>{warIdx+1}/{WAR_CARDS.length}</div>
         </div>
-        <button onClick={nextWar} style={{background:'transparent',border:`1px solid ${C.border}`,
-          borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-          próximo →
-        </button>
-      </div>
+
+        <div style={{fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,marginBottom:4}}>{wcard.titulo}</div>
+        <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:16}}>
+          {wcard.cat.toUpperCase()}
+        </div>
+
+        <div style={{height:1,background:C.border,marginBottom:16}}/>
+
+        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:6}}>ISTO PROVA</div>
+        <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:14}}>{wcard.prova}</div>
+
+        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:4}}>IDENTIDADE</div>
+        <div style={{fontSize:14,color:C.gold,marginBottom:14,fontWeight:600}}>{wcard.identidade}</div>
+
+        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:4}}>ATITUDE DE HOJE</div>
+        <div style={{fontSize:14,color:C.text,lineHeight:1.4,marginBottom:20}}>{wcard.atitude}</div>
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <button onClick={prevWar} style={{background:'transparent',border:`1px solid ${C.border}`,
+            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
+            ← anterior
+          </button>
+          <div style={{display:'flex',gap:4}}>
+            {WAR_CARDS.map((_,i)=><div key={i} style={{width:6,height:6,borderRadius:'50%',
+              background:i===warIdx?C.gold:C.border}}/>)}
+          </div>
+          <button onClick={nextWar} style={{background:'transparent',border:`1px solid ${C.border}`,
+            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
+            próximo →
+          </button>
+        </div>
+      </SpotlightCard>
     </div>
 
-    {/* 2. SISTEMA DOS 3 EUS */}
-    <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:20,padding:20}}>
-      <Label text="⚙️ SISTEMA DOS 3 EUS"/>
-      <div style={{fontSize:12,color:C.textSub,marginBottom:16}}>Passado mostra o padrão. Presente escolhe. Futuro recebe.</div>
-      {[{k:'passado',l:'EU DO PASSADO',q:'Qual padrão apareceu?',p:'procrastinação...'},
-        {k:'presente',l:'EU DO PRESENTE',q:'Qual ação faço agora?',p:'resolver 5 questões...'},
-        {k:'futuro',l:'EU DO FUTURO',q:'Se repetir 30 dias, quem me torno?',p:'mais disciplinado...'}
-      ].map(eu=>
-        <div key={eu.k} style={{marginBottom:14}}>
-          <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.1em',marginBottom:4}}>{eu.l}</div>
-          <div style={{fontSize:12,color:C.textSub,marginBottom:6}}>{eu.q}</div>
-          <textarea value={e[eu.k]} onChange={ev=>setEu(eu.k,ev.target.value)} placeholder={eu.p} rows={2}
-            style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:8,
-            padding:'10px 12px',color:C.text,fontSize:13,resize:'none',outline:'none',
-            boxSizing:'border-box',fontFamily:'inherit'}}/>
-        </div>)}
-      <div style={{display:'flex',gap:10}}>
-        <div style={{flex:1}}>
-          <Btn label={state.eusSaved?'✓ SALVO':'SALVAR REFLEXÃO'} variant="secondary" full
-            disabled={!e.passado.trim()||!e.presente.trim()||!e.futuro.trim()}
-            onClick={()=>{setState(s=>({...s,eusSaved:true,flags:{...s.flags,eus:true}}));
-              toast('Reflexão salva. +1 ponto.');}}/>
+    {/* Coluna da Direita (Reflexão/Manual) */}
+    <div style={{display:'flex', flexDirection:'column', gap:14}}>
+      {/* 2. SISTEMA DOS 3 EUS */}
+      <SpotlightCard style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:20,padding:20}}>
+        <Label text="⚙️ SISTEMA DOS 3 EUS"/>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:16}}>Passado mostra o padrão. Presente escolhe. Futuro recebe.</div>
+        {[{k:'passado',l:'EU DO PASSADO',q:'Qual padrão apareceu?',p:'procrastinação...'},
+          {k:'presente',l:'EU DO PRESENTE',q:'Qual ação faço agora?',p:'resolver 5 questões...'},
+          {k:'futuro',l:'EU DO FUTURO',q:'Se repetir 30 dias, quem me torno?',p:'mais disciplinado...'}
+        ].map(eu=>
+          <div key={eu.k} style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:4}}>{eu.l}</div>
+            <div style={{fontSize:12,color:C.textSub,marginBottom:6}}>{eu.q}</div>
+            <textarea value={e[eu.k]} onChange={ev=>setEu(eu.k,ev.target.value)} placeholder={eu.p} rows={2}
+              style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:8,
+              padding:'10px 12px',color:C.text,fontSize:13,resize:'none',outline:'none',
+              boxSizing:'border-box',fontFamily:'inherit'}}/>
+          </div>)}
+        <div style={{display:'flex',gap:10}}>
+          <div style={{flex:1}}>
+            <Btn label={state.eusSaved?'✓ SALVO':'SALVAR REFLEXÃO'} variant="secondary" full
+              disabled={!e.passado.trim()||!e.presente.trim()||!e.futuro.trim()}
+              onClick={()=>{setState(s=>({...s,eusSaved:true,flags:{...s.flags,eus:true}}));
+                toast('Reflexão salva. +1 ponto.');}}/>
+          </div>
+          <div style={{flex:1}}>
+            <Btn label="ATIVAR GUERREIRO ⚔️" full
+              disabled={!e.presente.trim()}
+              onClick={()=>{
+                if(!e.presente.trim())return;
+                if(!state.mission){
+                  toast('Defina uma missão antes de ativar o Guerreiro.');
+                  return;
+                }
+                setState(s=>({...s,action:{
+                  desc:e.presente.trim(),
+                  status:'pendente'
+                }}));
+                toast('Ação do Guerreiro atualizada.');}}/>
+          </div>
         </div>
-        <div style={{flex:1}}>
-          <Btn label="ATIVAR GUERREIRO ⚔️" full
-            disabled={!e.presente.trim()}
-            onClick={()=>{
-              if(!e.presente.trim())return;
-              if(!state.mission){
-                toast('Defina uma missão antes de ativar o Guerreiro.');
-                return;
-              }
-              setState(s=>({...s,action:{
-                desc:e.presente.trim(),
-                status:'pendente'
-              }}));
-              toast('Ação do Guerreiro atualizada.');}}/>
+      </SpotlightCard>
+
+      {/* 3. ARTIGO DO DIA */}
+      <SpotlightCard style={{background:C.bgCard,border:`1.5px solid ${C.gold}44`,borderRadius:20,padding:20}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em'}}>📜 ARTIGO DO DIA</div>
+          <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub}}>{artIdx+1}/{CONSTITUTION.length}</div>
         </div>
-      </div>
-    </div>
 
-    {/* 3. ARTIGO DO DIA */}
-    <div style={{background:C.bgCard,border:`1.5px solid ${C.gold}44`,borderRadius:20,padding:20}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em'}}>📜 ARTIGO DO DIA</div>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub}}>{artIdx+1}/{CONSTITUTION.length}</div>
-      </div>
-
-      <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.1em',marginBottom:8}}>
-        {artig.icon} ART. {artig.n} — {artig.titulo}
-      </div>
-      <div style={{fontSize:20,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.35,marginBottom:20}}>
-        {artig.principio}
-      </div>
-
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <button onClick={prevArt} style={{background:'transparent',border:`1px solid ${C.border}`,
-          borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-          ←
-        </button>
-        <div style={{display:'flex',gap:4}}>
-          {CONSTITUTION.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',
-            background:i===artIdx?C.gold:C.border}}/>)}
+        <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.1em',marginBottom:8}}>
+          {artig.icon} ART. {artig.n} — {artig.titulo}
         </div>
-        <button onClick={nextArt} style={{background:'transparent',border:`1px solid ${C.border}`,
-          borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-          →
-        </button>
-      </div>
+        <div style={{fontSize:20,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.35,marginBottom:20}}>
+          {artig.principio}
+        </div>
 
-      <Btn label="CONFRONTAR" full onClick={()=>setShowConfrontar(true)}/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <button onClick={prevArt} style={{background:'transparent',border:`1px solid ${C.border}`,
+            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
+            ←
+          </button>
+          <div style={{display:'flex',gap:4}}>
+            {CONSTITUTION.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',
+              background:i===artIdx?C.gold:C.border}}/>)}
+          </div>
+          <button onClick={nextArt} style={{background:'transparent',border:`1px solid ${C.border}`,
+            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
+            →
+          </button>
+        </div>
+
+        <Btn label="CONFRONTAR" full onClick={()=>setShowConfrontar(true)}/>
+      </SpotlightCard>
     </div>
 
   </div>;
@@ -696,147 +757,155 @@ function TabEvolucao({state,setState,toast,history,getPast30Days,getLocalDateStr
   if(!corr&&blocked)corr={area:'Conversão',icon:'📈',urgencia:'BLOQUEADO',acao:'Aplicar imediatamente um conteúdo aprendido.',cor:C.red};
   if(!corr)for(const k of order)if(p[k]===2){const a=PANEL_AREAS.find(x=>x.key===k);corr={area:a.label,icon:a.icon,urgencia:'ATENÇÃO',acao:a.micro,cor:C.yellow};break;}
 
-  return <div style={{padding:'20px 16px 100px',display:'flex',flexDirection:'column',gap:12}}>
+  return <div className="two-col-grid" style={{padding:'20px 16px 100px'}}>
 
-    {/* 1. CORREÇÃO PRIORITÁRIA — topo, primeira dobra */}
-    {corr?
-      <div style={{background:state.corrDone
-          ?'rgba(34,197,94,0.06)'
-          :`linear-gradient(135deg,${corr.cor}18,${corr.cor}08)`,
-        border:`1.5px solid ${state.corrDone?C.green+'44':corr.cor+'55'}`,
-        borderRadius:20,padding:20}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-          <Label text="🎯 CORREÇÃO PRIORITÁRIA" color={state.corrDone?C.green:corr.cor}/>
-          {!state.corrDone&&<div style={{fontSize:9,fontFamily:'monospace',color:corr.cor,
-            background:`${corr.cor}22`,border:`1px solid ${corr.cor}44`,
-            borderRadius:6,padding:'3px 8px',letterSpacing:'0.1em'}}>{corr.urgencia}</div>}
-        </div>
-        {state.corrDone
-          ?<>
-            <div style={{fontSize:15,fontWeight:700,color:C.green,marginBottom:6}}>✓ Correção realizada.</div>
-            <div style={{fontSize:13,color:C.textSub}}>Volte à Aba Hoje e execute.</div>
-          </>
-          :<>
-            <div style={{fontSize:22,fontWeight:700,color:C.text,lineHeight:1.2,marginBottom:4}}>
-              {corr.icon} {corr.area}
-            </div>
-            <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:20}}>
-              {corr.acao}
-            </div>
-            <Btn label="CORRIGIR AGORA" variant="critical" full
-              onClick={()=>{setState(s=>({...s,corrDone:true}));toast('Correção realizada.');}}/>
-          </>}
-      </div>
-      :<div style={{background:'rgba(34,197,94,0.06)',border:`1.5px solid ${C.green}44`,borderRadius:20,padding:20}}>
-        <Label text="🎯 CORREÇÃO PRIORITÁRIA" color={C.green}/>
-        <div style={{fontSize:15,fontWeight:700,color:C.green,marginBottom:4}}>✓ Tudo em ordem hoje.</div>
-        <div style={{fontSize:13,color:C.textSub}}>Nenhuma área crítica. Mantenha o ritmo.</div>
-      </div>}
-
-    {/* 2. ÍNDICE DE CONVERSÃO — compacto */}
-    <div style={{background:C.bgCard,border:`1px solid ${hasData?convColor+'44':C.border}`,borderRadius:16,padding:18}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <Label text="📈 CONVERSÃO"/>
-        <div style={{fontSize:11,fontFamily:'monospace',color:convColor,fontWeight:700}}>
-          {hasData?`${pct}% · ${convStatus}`:'SEM DADOS'}
-        </div>
-      </div>
-
-      {!hasData
-        ?<div style={{fontSize:13,color:C.textSub,marginBottom:14}}>
-            0% — Nenhuma execução registrada hoje.
-          </div>
-        :<div style={{display:'flex',gap:16,fontSize:12,color:C.textSub,marginBottom:12}}>
-            <span>Consumidos: <b style={{color:C.text}}>{c.consumidos}</b></span>
-            <span>Aplicados: <b style={{color:convColor}}>{c.aplicados}</b></span>
-          </div>}
-
-      {blocked&&<div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.25)',
-        borderRadius:8,padding:'8px 12px',marginBottom:12}}>
-        <div style={{fontSize:11,color:C.red,fontFamily:'monospace',fontWeight:700}}>
-          ⛔ BLOQUEIO — Aplique antes de consumir novo conteúdo.
-        </div>
-      </div>}
-
-      {/* botões com hierarquia: + Aplicação é primário */}
-      <div style={{display:'flex',gap:10}}>
-        <button
-          disabled={c.consumidos===0}
-          onClick={()=>{
-            if(c.consumidos===0){toast('Registre um conteúdo antes de aplicar.');return;}
-            setState(s=>({...s,corrDone:false,conversion:{...s.conversion,
-              aplicados:Math.min(s.conversion.aplicados+1,s.conversion.consumidos)}}));}}
-          style={{flex:2,padding:'11px 0',background:c.consumidos===0?C.bgSub:C.green,border:'none',
-            borderRadius:12,color:c.consumidos===0?C.textSub:'#0B0B0F',fontFamily:'monospace',fontWeight:700,
-            fontSize:12,cursor:c.consumidos===0?'default':'pointer',letterSpacing:'0.04em',
-            opacity:c.consumidos===0?0.4:1}}>
-          + Aplicação
-        </button>
-        <button
-          onClick={()=>setState(s=>({...s,corrDone:false,conversion:{...s.conversion,consumidos:s.conversion.consumidos+1}}))}
-          style={{flex:1,padding:'11px 0',background:'transparent',
-            border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,
-            fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-          + Conteúdo
-        </button>
-      </div>
+    {/* Grade de Batalhas (Largura total no desktop) */}
+    <div className="full-width-col">
+      <BattleGrid history={history} getPast30Days={getPast30Days} getLocalDateString={getLocalDateString} />
     </div>
 
-    {/* 3. PAINEL DA VIDA — colapsado por padrão */}
-    <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,overflow:'hidden'}}>
-      {/* cabeçalho sempre visível — toque para expandir */}
-      <button onClick={()=>setPanelOpen(o=>!o)} style={{width:'100%',padding:'16px 18px',
-        display:'flex',justifyContent:'space-between',alignItems:'center',
-        background:'transparent',border:'none',cursor:'pointer'}}>
-        <div style={{textAlign:'left'}}>
-          <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,
-            letterSpacing:'0.2em',marginBottom:3}}>⚖️ PAINEL DA VIDA</div>
-          <div style={{fontSize:13,color:panelSummaryColor,fontWeight:600}}>{panelSummary}</div>
-        </div>
-        <span style={{fontSize:12,fontFamily:'monospace',color:C.gold,marginLeft:12}}>
-          {panelOpen?'▲':'▼'}
-        </span>
-      </button>
+    {/* Coluna da Esquerda */}
+    <div style={{display:'flex', flexDirection:'column', gap:12}}>
+      {/* 1. CORREÇÃO PRIORITÁRIA */}
+      {corr?
+        <SpotlightCard style={{background:state.corrDone
+            ?'rgba(34,197,94,0.06)'
+            :`linear-gradient(135deg,${corr.cor}18,${corr.cor}08)`,
+          border:`1.5px solid ${state.corrDone?C.green+'44':corr.cor+'55'}`,
+          borderRadius:20,padding:20}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <Label text="🎯 CORREÇÃO PRIORITÁRIA" color={state.corrDone?C.green:corr.cor}/>
+            {!state.corrDone&&<div style={{fontSize:9,fontFamily:'monospace',color:corr.cor,
+              background:`${corr.cor}22`,border:`1px solid ${corr.cor}44`,
+              borderRadius:6,padding:'3px 8px',letterSpacing:'0.1em'}}>{corr.urgencia}</div>}
+          </div>
+          {state.corrDone
+            ?<>
+              <div style={{fontSize:15,fontWeight:700,color:C.green,marginBottom:6}}>✓ Correção realizada.</div>
+              <div style={{fontSize:13,color:C.textSub}}>Volte à Aba Hoje e execute.</div>
+            </>
+            :<>
+              <div style={{fontSize:22,fontWeight:700,color:C.text,lineHeight:1.2,marginBottom:4}}>
+                {corr.icon} {corr.area}
+              </div>
+              <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:20}}>
+                {corr.acao}
+              </div>
+              <Btn label="CORRIGIR AGORA" variant="critical" full
+                onClick={()=>{setState(s=>({...s,corrDone:true}));toast('Correção realizada.');}}/>
+            </>}
+        </SpotlightCard>
+        :<SpotlightCard style={{background:'rgba(34,197,94,0.06)',border:`1.5px solid ${C.green}44`,borderRadius:20,padding:20}}>
+          <Label text="🎯 CORREÇÃO PRIORITÁRIA" color={C.green}/>
+          <div style={{fontSize:15,fontWeight:700,color:C.green,marginBottom:4}}>✓ Tudo em ordem hoje.</div>
+          <div style={{fontSize:13,color:C.textSub}}>Nenhuma área crítica. Mantenha o ritmo.</div>
+        </SpotlightCard>}
 
-      {/* conteúdo expandido — uma área ajustável por vez, sem microações inline */}
-      {panelOpen&&<div style={{borderTop:`1px solid ${C.border}`,padding:'4px 0 8px'}}>
-        {PANEL_AREAS.map(a=>{
-          const lv=p[a.key];
-          const isActive=activeArea===a.key;
-          return <div key={a.key}>
-            <button onClick={()=>toggleArea(a.key)} style={{width:'100%',padding:'12px 18px',
-              display:'flex',justifyContent:'space-between',alignItems:'center',
-              background:isActive?`${lvColor(lv)}0D`:'transparent',
-              border:'none',cursor:'pointer'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <span style={{fontSize:15}}>{a.icon}</span>
-                <span style={{fontSize:13,color:C.text}}>{a.label}</span>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:13}}>{lvIcon(lv)}</span>
-                <span style={{fontSize:10,fontFamily:'monospace',color:lvColor(lv),
-                  letterSpacing:'0.04em'}}>{lvLabel(lv)}</span>
-                <span style={{fontSize:10,color:C.textSub,marginLeft:4}}>{isActive?'▲':'▼'}</span>
-              </div>
-            </button>
-            {isActive&&<div style={{padding:'4px 18px 14px',display:'flex',gap:8}}>
-              {[1,2,3].map(lvl=>(
-                <button key={lvl} onClick={()=>{
-                    setState(s=>({...s,corrDone:false,panel:{...s.panel,[a.key]:lvl}}));
-                    setActiveArea(null);
-                  }}
-                  style={{flex:1,padding:'8px 0',borderRadius:10,
-                    border:`1px solid ${lv===lvl?lvColor(lvl)+'88':C.border}`,
-                    background:lv===lvl?`${lvColor(lvl)}18`:'transparent',
-                    color:lv===lvl?lvColor(lvl):C.textSub,
-                    fontFamily:'monospace',fontSize:11,cursor:'pointer',fontWeight:lv===lvl?700:400}}>
-                  {lvl===3?'🟢 Bem':lvl===2?'🟡 Atenção':'🔴 Crítico'}
-                </button>
-              ))}
+      {/* 2. ÍNDICE DE CONVERSÃO */}
+      <SpotlightCard style={{background:C.bgCard,border:`1px solid ${hasData?convColor+'44':C.border}`,borderRadius:16,padding:18}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <Label text="📈 CONVERSÃO"/>
+          <div style={{fontSize:11,fontFamily:'monospace',color:convColor,fontWeight:700}}>
+            {hasData?`${pct}% · ${convStatus}`:'SEM DADOS'}
+          </div>
+        </div>
+
+        {!hasData
+          ?<div style={{fontSize:13,color:C.textSub,marginBottom:14}}>
+              0% — Nenhuma execução registrada hoje.
+            </div>
+          :<div style={{display:'flex',gap:16,fontSize:12,color:C.textSub,marginBottom:12}}>
+              <span>Consumidos: <b style={{color:C.text}}>{c.consumidos}</b></span>
+              <span>Aplicados: <b style={{color:convColor}}>{c.aplicados}</b></span>
             </div>}
-          </div>;
-        })}
-      </div>}
+
+        {blocked&&<div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.25)',
+          borderRadius:8,padding:'8px 12px',marginBottom:12}}>
+          <div style={{fontSize:11,color:C.red,fontFamily:'monospace',fontWeight:700}}>
+            ⛔ BLOQUEIO — Aplique antes de consumir novo conteúdo.
+          </div>
+        </div>}
+
+        <div style={{display:'flex',gap:10}}>
+          <button
+            disabled={c.consumidos===0}
+            onClick={()=>{
+              if(c.consumidos===0){toast('Registre um conteúdo antes de aplicar.');return;}
+              setState(s=>({...s,corrDone:false,conversion:{...s.conversion,
+                aplicados:Math.min(s.conversion.aplicados+1,s.conversion.consumidos)}}));}}
+            style={{flex:2,padding:'11px 0',background:c.consumidos===0?C.bgSub:C.green,border:'none',
+              borderRadius:12,color:c.consumidos===0?C.textSub:'#0B0B0F',fontFamily:'monospace',fontWeight:700,
+              fontSize:12,cursor:c.consumidos===0?'default':'pointer',letterSpacing:'0.04em',
+              opacity:c.consumidos===0?0.4:1}}>
+            + Aplicação
+          </button>
+          <button
+            onClick={()=>setState(s=>({...s,corrDone:false,conversion:{...s.conversion,consumidos:s.conversion.consumidos+1}}))}
+            style={{flex:1,padding:'11px 0',background:'transparent',
+              border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,
+              fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
+            + Conteúdo
+          </button>
+        </div>
+      </SpotlightCard>
+    </div>
+
+    {/* Coluna da Direita */}
+    <div style={{display:'flex', flexDirection:'column', gap:12}}>
+      {/* 3. PAINEL DA VIDA */}
+      <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,overflow:'hidden'}}>
+        <button onClick={()=>setPanelOpen(o=>!o)} style={{width:'100%',padding:'16px 18px',
+          display:'flex',justifyContent:'space-between',alignItems:'center',
+          background:'transparent',border:'none',cursor:'pointer'}}>
+          <div style={{textAlign:'left'}}>
+            <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,
+              letterSpacing:'0.2em',marginBottom:3}}>⚖️ PAINEL DA VIDA</div>
+            <div style={{fontSize:13,color:panelSummaryColor,fontWeight:600}}>{panelSummary}</div>
+          </div>
+          <span style={{fontSize:12,fontFamily:'monospace',color:C.gold,marginLeft:12}}>
+            {panelOpen?'▲':'▼'}
+          </span>
+        </button>
+
+        {panelOpen&&<div style={{borderTop:`1px solid ${C.border}`,padding:'4px 0 8px'}}>
+          {PANEL_AREAS.map(a=>{
+            const lv=p[a.key];
+            const isActive=activeArea===a.key;
+            return <div key={a.key}>
+              <button onClick={()=>toggleArea(a.key)} style={{width:'100%',padding:'12px 18px',
+                display:'flex',justifyContent:'space-between',alignItems:'center',
+                background:isActive?`${lvColor(lv)}0D`:'transparent',
+                border:'none',cursor:'pointer'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:15}}>{a.icon}</span>
+                  <span style={{fontSize:13,color:C.text}}>{a.label}</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:13}}>{lvIcon(lv)}</span>
+                  <span style={{fontSize:10,fontFamily:'monospace',color:lvColor(lv),
+                    letterSpacing:'0.04em'}}>{lvLabel(lv)}</span>
+                  <span style={{fontSize:10,color:C.textSub,marginLeft:4}}>{isActive?'▲':'▼'}</span>
+                </div>
+              </button>
+              {isActive&&<div style={{padding:'4px 18px 14px',display:'flex',gap:8}}>
+                {[1,2,3].map(lvl=>(
+                  <button key={lvl} onClick={()=>{
+                      setState(s=>({...s,corrDone:false,panel:{...s.panel,[a.key]:lvl}}));
+                      setActiveArea(null);
+                    }}
+                    style={{flex:1,padding:'8px 0',borderRadius:10,
+                      border:`1px solid ${lv===lvl?lvColor(lvl)+'88':C.border}`,
+                      background:lv===lvl?`${lvColor(lvl)}18`:'transparent',
+                      color:lv===lvl?lvColor(lvl):C.textSub,
+                      fontFamily:'monospace',fontSize:11,cursor:'pointer',fontWeight:lv===lvl?700:400}}>
+                    {lvl===3?'🟢 Bem':lvl===2?'🟡 Atenção':'🔴 Crítico'}
+                  </button>
+                ))}
+              </div>}
+            </div>;
+          })}
+        </div>}
+      </div>
     </div>
 
   </div>;
