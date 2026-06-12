@@ -108,6 +108,7 @@ function TabHoje({state,setState,toast}){
   const [showModal,setShowModal]=useState(false);
   const [mTitulo,setMTitulo]=useState('');
   const [mProva,setMProva]=useState('');
+  const [mArea,setMArea]=useState('fe'); // Área associada
   const [showTimer,setShowTimer]=useState(false);
   const [activeEscape,setActiveEscape]=useState(null);
   const [escapeOpen,setEscapeOpen]=useState(false);
@@ -126,8 +127,9 @@ function TabHoje({state,setState,toast}){
 
   const confirmMission=()=>{
     if(!mTitulo.trim()||!mProva.trim())return;
-    setState(s=>({...s,mission:{titulo:mTitulo.trim(),prova:mProva.trim()},
-      action:{desc:`Resolver a prova: ${mProva.trim()}`,status:'pendente'},
+    const areaObj = PANEL_AREAS.find(a=>a.key===mArea);
+    setState(s=>({...s,mission:{titulo:mTitulo.trim(),prova:mProva.trim(),area:mArea},
+      action:{desc:`[${areaObj.icon} ${areaObj.label}] Prova: ${mProva.trim()}`,status:'pendente'},
       flags:{...s.flags,missao:true}}));
     setShowModal(false);setMTitulo('');setMProva('');toast('Missão definida. +2 pontos.');
   };
@@ -159,7 +161,34 @@ function TabHoje({state,setState,toast}){
           style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',color:C.text,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:14}}/>
         <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',letterSpacing:'0.08em',marginBottom:6}}>QUAL É A PROVA DE EXECUÇÃO?</div>
         <input value={mProva} onChange={e=>setMProva(e.target.value)} placeholder="Resolver 10 questões..."
-          style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',color:C.text,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:24}}/>
+          style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',color:C.text,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:14}}/>
+        
+        <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',letterSpacing:'0.08em',marginBottom:8}}>ÁREA DO PAINEL ASSOCIADA</div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:24}}>
+          {PANEL_AREAS.map(a => {
+            const selected = mArea === a.key;
+            return (
+              <button
+                key={a.key}
+                onClick={() => setMArea(a.key)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  cursor: 'pointer',
+                  border: `1.5px solid ${selected ? C.gold : C.border}`,
+                  background: selected ? 'rgba(201,169,106,0.12)' : 'transparent',
+                  color: selected ? C.gold : C.textSub,
+                  transition: 'all 0.15s'
+                }}
+              >
+                {a.icon} {a.label}
+              </button>
+            );
+          })}
+        </div>
+
         <Btn label="CONFIRMAR MISSÃO ✓" full disabled={!mTitulo.trim()||!mProva.trim()} onClick={confirmMission}/>
       </div>
     </div>}
@@ -173,9 +202,19 @@ function TabHoje({state,setState,toast}){
         <div style={{fontSize:22,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.15,marginBottom:10}}>
           {state.mission.titulo}
         </div>
-        <div style={{display:'inline-flex',gap:6,background:'rgba(201,169,106,0.12)',
-          border:'1px solid rgba(201,169,106,0.25)',borderRadius:7,padding:'5px 10px'}}>
-          <span style={{fontSize:10,color:C.gold,fontFamily:'monospace'}}>🎯 {state.mission.prova}</span>
+        <div style={{display:'flex',gap:6}}>
+          <div style={{display:'inline-flex',gap:6,background:'rgba(201,169,106,0.12)',
+            border:'1px solid rgba(201,169,106,0.25)',borderRadius:7,padding:'5px 10px'}}>
+            <span style={{fontSize:10,color:C.gold,fontFamily:'monospace'}}>🎯 {state.mission.prova}</span>
+          </div>
+          {state.mission.area && (
+            <div style={{display:'inline-flex',gap:6,background:C.bgSub,
+              border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px'}}>
+              <span style={{fontSize:10,color:C.textSub,fontFamily:'monospace'}}>
+                {PANEL_AREAS.find(a=>a.key===state.mission.area)?.icon} {PANEL_AREAS.find(a=>a.key===state.mission.area)?.label.toUpperCase()}
+              </span>
+            </div>
+          )}
         </div>
       </div>
       :<div onClick={()=>setShowModal(true)} style={{background:C.bgCard,border:`1.5px dashed ${C.gold}4D`,
@@ -204,9 +243,10 @@ function TabHoje({state,setState,toast}){
             ...s,
             action:{...s.action,status:'done'},
             flags:{...s.flags,acao:true,naoZerou:true},
-            streak: s.flags.naoZerou ? s.streak : s.streak + 1
+            streak: s.flags.naoZerou ? s.streak : s.streak + 1,
+            panel: s.mission?.area ? { ...s.panel, [s.mission.area]: 3 } : s.panel
           }));
-          toast('Missão executada. +3 pontos.');}}/>
+          toast(state.mission?.area ? `Missão executada. Área ${PANEL_AREAS.find(a=>a.key===state.mission.area)?.label} no máximo!` : 'Missão executada. +3 pontos.');}}/>
       </div>}
       {state.action?.status==='done'&&
         <div style={{color:C.green,fontSize:13,fontFamily:'monospace',fontWeight:700}}>✓ CONCLUÍDA</div>}
@@ -337,8 +377,15 @@ function TabHoje({state,setState,toast}){
               <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:3}}>AÇÃO CORRETIVA</div>
               <div style={{fontSize:12,color:C.text,marginBottom:12}}>{e.acao}</div>
               <Btn label={e.btn} variant="secondary" full onClick={()=>{
-                setState(s=>({...s,fixedEscapes:[...s.fixedEscapes,e.id],flags:{...s.flags,fuga:true}}));
-                setActiveEscape(null);toast('Fuga corrigida. +2 pontos.');}}/>
+                setState(s=>({
+                  ...s,
+                  fixedEscapes:[...s.fixedEscapes,e.id],
+                  flags:{...s.flags,fuga:true},
+                  action: { desc: `[CORREÇÃO DE FUGA] ${e.acao}`, status: 'pendente' }
+                }));
+                setActiveEscape(null);
+                toast('Fuga corrigida. Ação injetada no Guerreiro!');
+              }}/>
             </div>}
           </div>;
         })}
@@ -502,8 +549,122 @@ function TabIdentidade({state,setState,toast}){
   </div>;
 }
 
+// ─── GRADE DE BATALHAS (COMPONENTE DE HISTÓRICO) ───
+function BattleGrid({ history, getPast30Days, getLocalDateString }) {
+  const [selectedDay, setSelectedDay] = useState(null);
+  
+  const dates = getPast30Days();
+  const calculateScore = (s) => {
+    if (!s || !s.flags) return 0;
+    const f = s.flags;
+    return (f.missao?2:0)+(f.acao?3:0)+(f.fuga?2:0)+(f.eus?1:0)+(f.naoZerou?2:0);
+  };
+
+  const getDayColor = (score, hasData) => {
+    if (!hasData) return 'rgba(31, 41, 55, 0.4)';
+    if (score === 0) return 'rgba(31, 41, 55, 0.7)';
+    if (score <= 3) return 'rgba(239, 68, 68, 0.7)';
+    if (score <= 5) return 'rgba(245, 158, 11, 0.7)';
+    if (score <= 7) return 'rgba(148, 163, 184, 0.6)';
+    if (score <= 9) return 'rgba(34, 197, 94, 0.7)';
+    return 'rgba(201, 169, 106, 0.9)';
+  };
+
+  const getDayLabel = (score) => {
+    if (score <= 3) return 'Dia Fraco';
+    if (score <= 5) return 'Dia Mínimo';
+    if (score <= 7) return 'Dia Bom';
+    if (score <= 9) return 'Dia Forte';
+    return 'Dia Elite';
+  };
+
+  const formatDateFriendly = (dateStr) => {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[2]}/${parts[1]}`;
+  };
+
+  return (
+    <div style={{background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, marginBottom: 4}}>
+      <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.2em',marginBottom:12}}>📊 HISTÓRICO DE BATALHAS (30 DIAS)</div>
+      
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 8, marginBottom: 12}}>
+        {dates.map(dateStr => {
+          const entry = history.find(h => h.date === dateStr);
+          const score = entry ? calculateScore(entry.state) : 0;
+          const hasData = !!entry;
+          const color = getDayColor(score, hasData);
+          const active = selectedDay === dateStr;
+
+          return (
+            <button
+              key={dateStr}
+              onClick={() => setSelectedDay(selectedDay === dateStr ? null : dateStr)}
+              style={{
+                width: '100%',
+                aspectRatio: '1',
+                background: color,
+                border: active ? `2.2px solid ${C.gold}` : `1px solid rgba(255,255,255,0.05)`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                padding: 0
+              }}
+              title={`${formatDateFriendly(dateStr)}: ${hasData ? `${score} pts (${getDayLabel(score)})` : 'Sem dados'}`}
+            />
+          );
+        })}
+      </div>
+
+      {selectedDay && (() => {
+        const entry = history.find(h => h.date === selectedDay);
+        const score = entry ? calculateScore(entry.state) : 0;
+        const hasData = !!entry;
+
+        return (
+          <div style={{background: C.bgSub, borderRadius: 10, padding: 12, border: `1px solid ${C.border}`, animation: 'fadeIn 0.2s'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6}}>
+              <span style={{fontFamily: 'monospace', fontSize: 11, color: C.gold}}>{formatDateFriendly(selectedDay)}</span>
+              <span style={{fontFamily: 'monospace', fontSize: 11, color: hasData ? C.text : C.textSub}}>
+                {hasData ? `${score}/10 pts · ${getDayLabel(score)}` : 'Sem registros'}
+              </span>
+            </div>
+            {hasData ? (
+              <div>
+                <div style={{fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 4}}>
+                  🎯 {entry.state.mission?.titulo || 'Nenhuma missão definida'}
+                </div>
+                {entry.state.mission?.prova && (
+                  <div style={{fontSize: 11, color: C.textSub, fontStyle: 'italic'}}>
+                    Prova: {entry.state.mission.prova}
+                  </div>
+                )}
+                {entry.state.streak > 0 && (
+                  <div style={{fontSize: 10, fontFamily: 'monospace', color: C.gold, marginTop: 6}}>
+                    🔥 Sequência ativa: {entry.state.streak} dias
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{fontSize: 12, color: C.textSub, fontStyle: 'italic'}}>
+                Nenhuma atividade registrada nesta data.
+              </div>
+            )}
+          </div>
+        );
+      })()}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── ABA EVOLUÇÃO ───
-function TabEvolucao({state,setState,toast}){
+function TabEvolucao({state,setState,toast,history,getPast30Days,getLocalDateString}){
   const [panelOpen,setPanelOpen]=useState(false);
   const [activeArea,setActiveArea]=useState(null);
 
@@ -687,6 +848,8 @@ export default function App(){
   const toast=m=>{setToastMsg(m);setTimeout(()=>setToastMsg(null),2200);};
 
   const [loading,setLoading]=useState(true);
+  const [showHelp,setShowHelp]=useState(false); // Ajuda flutuante
+  const [history,setHistory]=useState([]); // Histórico dos últimos 30 dias
   const [state,setState]=useState({
     mission:null,
     action:null,
@@ -716,6 +879,18 @@ export default function App(){
     return Math.round(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  const getPast30Days = () => {
+    const dates = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const offset = d.getTimezoneOffset();
+      const localDate = new Date(d.getTime() - offset * 60 * 1000);
+      dates.push(localDate.toISOString().split('T')[0]);
+    }
+    return dates;
+  };
+
   useEffect(() => {
     async function loadState() {
       try {
@@ -728,7 +903,17 @@ export default function App(){
             const parsed = JSON.parse(localData);
             if (parsed) setState(parsed);
           } catch (e) {
-            console.error('Erro ao analisar LocalStorage:', e);
+            console.error('Erro ao analisar LocalStorage state:', e);
+          }
+        }
+
+        const localHistData = localStorage.getItem('guerreiro_history');
+        if (localHistData) {
+          try {
+            const parsedHist = JSON.parse(localHistData);
+            if (parsedHist) setHistory(parsedHist);
+          } catch (e) {
+            console.error('Erro ao analisar LocalStorage history:', e);
           }
         }
 
@@ -746,6 +931,15 @@ export default function App(){
           .maybeSingle();
 
         if (error) throw error;
+
+        // Também carrega o histórico dos últimos 30 dias do Supabase
+        const { data: histData } = await supabase
+          .from('guerreiro_daily_states')
+          .select('date, state')
+          .order('date', { ascending: false })
+          .limit(30);
+
+        if (histData) setHistory(histData);
 
         if (data && data.state) {
           setState(data.state);
@@ -795,13 +989,25 @@ export default function App(){
   useEffect(() => {
     if (loading) return;
 
+    const todayStr = getLocalDateString();
+
     // Sempre salvar no LocalStorage como backup local
     localStorage.setItem('guerreiro_state', JSON.stringify(state));
+
+    let localHist = [];
+    try {
+      const stored = localStorage.getItem('guerreiro_history');
+      localHist = stored ? JSON.parse(stored) : [];
+    } catch(e){}
+    localHist = [
+      { date: todayStr, state: state },
+      ...localHist.filter(h => h.date !== todayStr)
+    ].slice(0, 30);
+    localStorage.setItem('guerreiro_history', JSON.stringify(localHist));
 
     // Salvar no Supabase apenas se configurado
     if (!isSupabaseConfigured) return;
 
-    const todayStr = getLocalDateString();
     const timeoutId = setTimeout(async () => {
       try {
         const { error } = await supabase
@@ -903,7 +1109,7 @@ export default function App(){
   }
 
   return <div style={{fontFamily:'system-ui,sans-serif',background:C.bg,minHeight:'100vh',
-    maxWidth:480,margin:'0 auto',display:'flex',flexDirection:'column',color:C.text,position:'relative'}}>
+    maxWidth: 480,margin:'0 auto',display:'flex',flexDirection:'column',color:C.text,position:'relative'}}>
     <style>{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{display:none}`}</style>
     <Toast msg={toastMsg}/>
 
@@ -925,16 +1131,125 @@ export default function App(){
     )}
 
     {/* HEADER */}
-    <div style={{position:'sticky',top:0,zIndex:200,background:C.bg,borderBottom:`1px solid ${C.border}`,padding:'12px 20px'}}>
-      <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.25em',marginBottom:2}}>COMANDO CENTRAL</div>
-      <div style={{fontSize:16,fontFamily:'Georgia,serif',color:C.text}}>{ti.icon} {ti.l} — {dateDisplay()}</div>
+    <div style={{
+      position:'sticky',
+      top:0,
+      zIndex:200,
+      background:C.bg,
+      borderBottom:`1px solid ${C.border}`,
+      padding:'12px 20px',
+      display:'flex',
+      justifyContent:'space-between',
+      alignItems:'center'
+    }}>
+      <div>
+        <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.25em',marginBottom:2}}>COMANDO CENTRAL</div>
+        <div style={{fontSize:16,fontFamily:'Georgia,serif',color:C.text}}>{ti.icon} {ti.l} — {dateDisplay()}</div>
+      </div>
+      
+      {/* Barra de Status Dinâmica e Manual */}
+      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+        {[
+          { label: 'MISSÃO', active: state.flags.missao, char: '🎯' },
+          { label: 'AÇÃO', active: state.flags.acao, char: '⚔️' },
+          { label: 'FUGA', active: state.flags.fuga, char: '🔍' },
+          { label: 'REFLEXÃO', active: state.flags.eus, char: '📜' }
+        ].map(item => (
+          <div
+            key={item.label}
+            title={item.label}
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              background: item.active ? 'rgba(34,197,94,0.15)' : C.bgSub,
+              border: `1px solid ${item.active ? C.green : C.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              filter: item.active ? 'none' : 'grayscale(100%) opacity(40%)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            {item.char}
+          </div>
+        ))}
+        
+        <button
+          onClick={() => setShowHelp(true)}
+          style={{
+            background: 'transparent',
+            border: `1.2px solid ${C.gold}`,
+            color: C.gold,
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'monospace',
+            marginLeft: 4,
+            transition: 'all 0.15s'
+          }}
+          onMouseEnter={e => e.target.style.background = 'rgba(201,169,106,0.1)'}
+          onMouseLeave={e => e.target.style.background = 'transparent'}
+        >
+          ?
+        </button>
+      </div>
     </div>
+
+    {/* MODAL MANUAL DO GUERREIRO */}
+    {showHelp && (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',display:'flex',
+        alignItems:'center',justifyContent:'center',zIndex:500,padding:24}} onClick={()=>setShowHelp(false)}>
+        <div onClick={e=>e.stopPropagation()} style={{background:C.bgCard,borderRadius:20,
+          padding:24,width:'100%',maxWidth:400,border:`1.5px solid ${C.gold}`,boxShadow:'0 10px 25px rgba(0,0,0,0.5)'}}>
+          <Label text="📜 MANUAL DO GUERREIRO" color={C.gold}/>
+          <div style={{fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'monospace',maxHeight:'55vh',overflowY:'auto',paddingRight:6,marginBottom:20}}>
+            <p style={{marginBottom:12}}>Bem-vindo ao <b>Comando Central</b>. Este aplicativo foi desenhado para proteger sua mente contra a procrastinação e direcionar sua energia para a execução diária.</p>
+            
+            <p style={{fontWeight:700,color:C.gold,marginTop:16,marginBottom:6}}>⚡ FLUXO DIÁRIO DO GUERREIRO:</p>
+            <ol style={{paddingLeft:16,marginBottom:12}}>
+              <li style={{marginBottom:8}}><b>Defina sua Missão:</b> Estabeleça a prioridade máxima do dia e a prova palpável de que a concluiu. Associe-a a uma área da vida.</li>
+              <li style={{marginBottom:8}}><b>Execute:</b> Use o timer da Ação do Guerreiro de 25 minutos para se focar 100% sem distrações.</li>
+              <li style={{marginBottom:8}}><b>Confronte Fugas:</b> Se sentir vontade de planejar demais, abra o Detector de Fugas, selecione o problema e injete a ação corretiva diretamente no timer.</li>
+              <li style={{marginBottom:8}}><b>Seja Resiliente:</b> Se travar, clique em "TRAVADO" para respirar por 90s. Se estiver exausto, clique em "CANSAÇO" para fazer a menor ação viável do dia ("Não Zerar").</li>
+            </ol>
+
+            <p style={{fontWeight:700,color:C.gold,marginTop:16,marginBottom:6}}>📈 EVOLUÇÃO E IDENTIDADE:</p>
+            <ul style={{paddingLeft:16,marginBottom:12}}>
+              <li style={{marginBottom:8}}><b>Os 3 Eus:</b> Escreva suas reflexões diárias para moldar sua identidade.</li>
+              <li style={{marginBottom:8}}><b>Histórico de Batalhas:</b> Veja sua consistência dos últimos 30 dias na aba de Evolução.</li>
+            </ul>
+          </div>
+          <Btn label="ENTENDIDO, AO TRABALHO! ⚔️" full onClick={()=>setShowHelp(false)}/>
+        </div>
+      </div>
+    )}
 
     {/* CONTENT */}
     <div style={{flex:1,overflowY:'auto'}}>
       {tab==='hoje'&&<TabHoje state={state} setState={setState} toast={toast}/>}
       {tab==='identidade'&&<TabIdentidade state={state} setState={setState} toast={toast}/>}
-      {tab==='evolucao'&&<TabEvolucao state={state} setState={setState} toast={toast}/>}
+      {tab==='evolucao'&&(() => {
+        const combinedHistory = [
+          { date: getLocalDateString(), state: state },
+          ...history.filter(h => h.date !== getLocalDateString())
+        ];
+        return <TabEvolucao 
+          state={state} 
+          setState={setState} 
+          toast={toast} 
+          history={combinedHistory} 
+          getPast30Days={getPast30Days} 
+          getLocalDateString={getLocalDateString}
+        />;
+      })()}
     </div>
 
     {/* NAV */}
