@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabase";
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 const C = {
   bg:'#0B0B0F', bgCard:'#101828', bgSub:'#1F2937', gold:'#C9A96A',
@@ -720,6 +720,25 @@ export default function App(){
     async function loadState() {
       try {
         const todayStr = getLocalDateString();
+        
+        // 1. Tentar ler do LocalStorage como fallback imediato
+        const localData = localStorage.getItem('guerreiro_state');
+        if (localData) {
+          try {
+            const parsed = JSON.parse(localData);
+            if (parsed) setState(parsed);
+          } catch (e) {
+            console.error('Erro ao analisar LocalStorage:', e);
+          }
+        }
+
+        // 2. Se o Supabase não estiver configurado, finaliza aqui
+        if (!isSupabaseConfigured) {
+          setLoading(false);
+          return;
+        }
+
+        // 3. Se estiver configurado, carrega do Supabase
         const { data, error } = await supabase
           .from('guerreiro_daily_states')
           .select('state')
@@ -765,7 +784,7 @@ export default function App(){
         }
       } catch (err) {
         console.error('Erro ao carregar dados do Supabase:', err);
-        toast('Erro ao conectar ao banco de dados.');
+        toast('Erro ao conectar ao banco de dados. Usando dados locais.');
       } finally {
         setLoading(false);
       }
@@ -775,6 +794,12 @@ export default function App(){
 
   useEffect(() => {
     if (loading) return;
+
+    // Sempre salvar no LocalStorage como backup local
+    localStorage.setItem('guerreiro_state', JSON.stringify(state));
+
+    // Salvar no Supabase apenas se configurado
+    if (!isSupabaseConfigured) return;
 
     const todayStr = getLocalDateString();
     const timeoutId = setTimeout(async () => {
@@ -881,6 +906,23 @@ export default function App(){
     maxWidth:480,margin:'0 auto',display:'flex',flexDirection:'column',color:C.text,position:'relative'}}>
     <style>{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{display:none}`}</style>
     <Toast msg={toastMsg}/>
+
+    {!isSupabaseConfigured && (
+      <div style={{
+        background: 'rgba(245,158,11,0.08)',
+        borderBottom: `1.5px solid rgba(245,158,11,0.2)`,
+        padding: '10px 16px',
+        fontSize: 11,
+        fontFamily: 'monospace',
+        color: C.yellow,
+        textAlign: 'center',
+        letterSpacing: '0.04em',
+        lineHeight: 1.4,
+        zIndex: 300
+      }}>
+        ⚠️ <b>MODO OFFLINE (LOCAL):</b> Configure as variáveis do Supabase no Netlify para ativar a nuvem.
+      </div>
+    )}
 
     {/* HEADER */}
     <div style={{position:'sticky',top:0,zIndex:200,background:C.bg,borderBottom:`1px solid ${C.border}`,padding:'12px 20px'}}>
