@@ -1768,39 +1768,131 @@ function ProjectConfig({ state, setState, activeProject, triggerToast }) {
 // ─── ABA CRONOGRAMA ───
 function TabCronograma({state, setState, toast}) {
   const checked = state.cronograma?.weeklyChecked || {};
+  const userSchedule = state.cronograma?.items || [];
+  const projects = state.projects || [];
   const pilaresById = Object.fromEntries(CRONOGRAMA_PILARES.map(p => [p.id, p]));
-  const totalSlots = CRONOGRAMA_BLOCOS.reduce((sum, b) => sum + b.dias.length, 0);
-  const totalDone = CRONOGRAMA_BLOCOS.reduce((sum, b, bi) => sum + b.dias.filter(d => checked[`${bi}-${d}`]).length, 0);
-  const pct = totalSlots ? Math.round((totalDone / totalSlots) * 100) : 0;
+  const [projectId, setProjectId] = useState(projects[0]?.id || '');
+  const selectedProject = projects.find(p => p.id === projectId) || projects[0] || null;
+  const [roadmapId, setRoadmapId] = useState('');
+  const [title, setTitle] = useState('');
+  const [time, setTime] = useState('06:00');
+  const [days, setDays] = useState([0,1,2,3,4]);
   const [showCelebration, setShowCelebration] = useState(false);
 
-  const toggleSlot = (blocoIndex, diaIndex) => {
-    const key = `${blocoIndex}-${diaIndex}`;
+  useEffect(() => {
+    if (!projectId && projects[0]?.id) setProjectId(projects[0].id);
+  }, [projects, projectId]);
+
+  const getPilar = (project) => {
+    const pilarId = project?.pilarId || 'trabalho';
+    return pilaresById[pilarId] || CRONOGRAMA_PILARES[2];
+  };
+
+  const enrichedSchedule = userSchedule.map(item => {
+    const project = projects.find(p => p.id === item.projectId);
+    const roadmap = (project?.roadmap || []).find(r => r.id === item.roadmapId);
+    const pilar = getPilar(project);
+    return {
+      ...item,
+      project,
+      roadmap,
+      pilar,
+      titulo: item.title || roadmap?.title || project?.name || 'Bloco sem nome',
+      detalhe: project ? `${project.name}${roadmap?.title ? ' → ' + roadmap.title : ''}` : 'Projeto removido'
+    };
+  }).sort((a,b) => (a.time || '').localeCompare(b.time || ''));
+
+  const totalSlots = enrichedSchedule.reduce((sum, item) => sum + (item.days || []).length, 0);
+  const totalDone = enrichedSchedule.reduce((sum, item) => sum + (item.days || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+  const pct = totalSlots ? Math.round((totalDone / totalSlots) * 100) : 0;
+
+  const pilarStats = CRONOGRAMA_PILARES.map(p => {
+    let total = 0, done = 0;
+    enrichedSchedule.forEach(item => {
+      if (item.pilar.id !== p.id) return;
+      total += (item.days || []).length;
+      done += (item.days || []).filter(d => checked[`${item.id}-${d}`]).length;
+    });
+    return { ...p, total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+  });
+
+  const projectStats = projects.map(project => {
+    const items = enrichedSchedule.filter(item => item.projectId === project.id);
+    const total = items.reduce((sum, item) => sum + (item.days || []).length, 0);
+    const done = items.reduce((sum, item) => sum + (item.days || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+    return { project, total, done, pct: total ? Math.round((done / total) * 100) : 0, pilar: getPilar(project) };
+  }).filter(x => x.total > 0).sort((a,b) => b.pct - a.pct);
+
+  const toggleDay = (day) => {
+    setDays(curr => curr.includes(day) ? curr.filter(d => d !== day) : [...curr, day].sort((a,b)=>a-b));
+  };
+
+  const addScheduleItem = () => {
+    const project = selectedProject;
+    if (!project) { toast('Crie um projeto primeiro na aba RAMIFICAÇÕES.'); return; }
+    if (!days.length) { toast('Escolha pelo menos um dia da semana.'); return; }
+    const roadmap = (project.roadmap || []).find(r => r.id === roadmapId);
+    const newItem = {
+      id: 'sch-' + Date.now(),
+      projectId: project.id,
+      roadmapId: roadmapId || null,
+      title: title.trim() || roadmap?.title || project.name,
+      time,
+      days,
+      created_at: new Date().toISOString()
+    };
+    setState(s => ({
+      ...s,
+      cronograma: { ...(s.cronograma || {}), items: [...(s.cronograma?.items || []), newItem] }
+    }));
+    setTitle('');
+    setRoadmapId('');
+    toast(`📅 Bloco criado no cronograma: ${newItem.title}`);
+  };
+
+  const removeScheduleItem = (id) => {
+    setState(s => {
+      const items = (s.cronograma?.items || []).filter(item => item.id !== id);
+      const newChecked = { ...(s.cronograma?.weeklyChecked || {}) };
+      Object.keys(newChecked).forEach(k => { if (k.startsWith(`${id}-`)) delete newChecked[k]; });
+      return { ...s, cronograma: { ...(s.cronograma || {}), items, weeklyChecked: newChecked } };
+    });
+    toast('Bloco removido do cronograma.');
+  };
+
+  const toggleSlot = (item, diaIndex) => {
+    const key = `${item.id}-${diaIndex}`;
     const newChecked = { ...checked, [key]: !checked[key] };
     if (!newChecked[key]) delete newChecked[key];
-    setState(s => ({ ...s, cronograma: { ...s.cronograma, weeklyChecked: newChecked } }));
+    setState(s => {
+      let projectsUpdated = s.projects || [];
+      if (!checked[key] && item.roadmapId) {
+        const itemDoneCount = (item.days || []).filter(d => newChecked[`${item.id}-${d}`]).length;
+        const itemTotal = (item.days || []).length;
+        projectsUpdated = projectsUpdated.map(project => {
+          if (project.id !== item.projectId) return project;
+          const roadmap = (project.roadmap || []).map(r => r.id === item.roadmapId ? {
+            ...r,
+            progress: itemTotal ? Math.round((itemDoneCount / itemTotal) * 100) : r.progress,
+            status: itemTotal && itemDoneCount >= itemTotal ? 'completed' : (itemDoneCount > 0 ? 'in_progress' : r.status)
+          } : r);
+          return { ...project, roadmap };
+        });
+      }
+      return { ...s, projects: projectsUpdated, cronograma: { ...(s.cronograma || {}), weeklyChecked: newChecked } };
+    });
     if (!checked[key]) {
-      const bloco = CRONOGRAMA_BLOCOS[blocoIndex];
-      const pilar = pilaresById[bloco.pilar];
-      toast(`${pilar.icon} ${bloco.titulo} concluído. ${pilar.label} avançou.`);
+      toast(`${item.pilar.icon} ${item.titulo} concluído no dia. Projeto avançou.`);
       const doneNow = Object.keys(newChecked).length;
-      if (doneNow === totalSlots) {
+      if (totalSlots > 0 && doneNow === totalSlots) {
         setShowCelebration(true);
-        toast('🏆 SEMANA COMPLETA! Todos os blocos do cronograma foram vencidos.');
+        toast('🏆 CRONOGRAMA GERAL COMPLETO! Todos os projetos avançaram.');
         setTimeout(() => setShowCelebration(false), 2800);
       }
     }
   };
 
-  const pilarStats = CRONOGRAMA_PILARES.map(p => {
-    let total = 0, done = 0;
-    CRONOGRAMA_BLOCOS.forEach((b, bi) => {
-      if (b.pilar !== p.id) return;
-      total += b.dias.length;
-      done += b.dias.filter(d => checked[`${bi}-${d}`]).length;
-    });
-    return { ...p, total, done, pct: total ? Math.round((done / total) * 100) : 0 };
-  });
+  const times = [...new Set(enrichedSchedule.map(i => i.time))].sort();
 
   return (
     <div style={{ padding: '14px 12px 100px' }}>
@@ -1812,21 +1904,21 @@ function TabCronograma({state, setState, toast}) {
       {showCelebration && (
         <div style={{ position:'fixed', inset:0, background:'rgba(11,11,15,.92)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', zIndex:500 }}>
           <div style={{fontSize:72, animation:'checkPop .5s ease'}}>🏆</div>
-          <div style={{fontSize:22, color:C.gold, fontFamily:'Georgia,serif', textAlign:'center'}}>SEMANA DO GUERREIRO DOMINADA</div>
-          <div style={{fontSize:12, color:C.textMuted, fontFamily:'monospace', marginTop:8}}>cronograma inteiro concluído</div>
+          <div style={{fontSize:22, color:C.gold, fontFamily:'Georgia,serif', textAlign:'center'}}>EVOLUÇÃO GERAL DOMINADA</div>
+          <div style={{fontSize:12, color:C.textMuted, fontFamily:'monospace', marginTop:8}}>cronograma de todos os projetos concluído</div>
         </div>
       )}
 
       <SpotlightCard style={{ background:'linear-gradient(135deg,#101828,#0D1F35)', border:`1px solid ${C.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
-        <Label text="📋 CRONOGRAMA SEMANAL DO GUERREIRO" color={C.gold} />
+        <Label text="📋 CRONOGRAMA GERAL DOS PROJETOS" color={C.gold} />
         <div style={{fontSize:12, color:C.textMuted, lineHeight:1.5, marginBottom:12}}>
-          Modelo visual por horário, dia e pilar. Marcou, completou. A semana mostra onde sua vida está avançando: mente, alma, trabalho e saúde.
+          Você monta o cronograma a partir dos seus projetos e ramificações. A evolução geral é calculada pelo cumprimento dos blocos agendados de todos os projetos, não por um modelo fixo.
         </div>
         <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:10}}>
           <div style={{fontSize:30, color:C.text, fontFamily:'Georgia,serif'}}>{pct}%</div>
           <div style={{flex:1}}>
             <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:C.textMuted, fontFamily:'monospace', marginBottom:5}}>
-              <span>{totalDone}/{totalSlots} blocos concluídos</span><span>semana ativa</span>
+              <span>{totalDone}/{totalSlots} blocos concluídos</span><span>evolução geral</span>
             </div>
             <div style={{height:7, background:'#222', borderRadius:6, overflow:'hidden'}}><div style={{height:'100%', width:`${pct}%`, background:pct===100?C.gold:C.success, transition:'width .25s ease'}} /></div>
           </div>
@@ -1842,33 +1934,66 @@ function TabCronograma({state, setState, toast}) {
         </div>
       </SpotlightCard>
 
+      <SpotlightCard style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:16, marginBottom:14}}>
+        <Label text="➕ ADICIONAR BLOCO AO CRONOGRAMA" color={C.accent} />
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}}>
+          <select value={selectedProject?.id || ''} onChange={e=>{setProjectId(e.target.value); setRoadmapId('');}} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}}>
+            {projects.length === 0 && <option value="">Crie um projeto primeiro</option>}
+            {projects.map(p => <option key={p.id} value={p.id}>{p.emoji || '📁'} {p.name}</option>)}
+          </select>
+          <select value={roadmapId} onChange={e=>setRoadmapId(e.target.value)} disabled={!selectedProject} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, opacity:selectedProject?1:.5}}>
+            <option value="">Projeto inteiro / rotina fixa</option>
+            {(selectedProject?.roadmap || []).map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+          </select>
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 120px', gap:10, marginBottom:10}}>
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Título do bloco. Ex.: Programar ComprasOps" style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}} />
+          <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}} />
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:6, marginBottom:12}}>
+          {CRONOGRAMA_DIAS.map((d, i) => <button key={d} onClick={()=>toggleDay(i)} style={{border:`1px solid ${days.includes(i)?C.accent:C.border}`, background:days.includes(i)?`${C.accent}22`:'#111827', color:days.includes(i)?C.accent:C.textMuted, borderRadius:8, padding:'8px 4px', fontSize:10, fontWeight:800}}>{d}</button>)}
+        </div>
+        <Btn label="ADICIONAR AO CRONOGRAMA" onClick={addScheduleItem} full />
+      </SpotlightCard>
+
+      {projectStats.length > 0 && <SpotlightCard style={{background:'#0F172A', border:`1px solid ${C.border}`, borderRadius:16, padding:16, marginBottom:14}}>
+        <Label text="📈 EVOLUÇÃO POR PROJETO" color={C.success} />
+        <div style={{display:'flex', flexDirection:'column', gap:9}}>
+          {projectStats.map(({project,total,done,pct,pilar}) => <div key={project.id}>
+            <div style={{display:'flex', justifyContent:'space-between', color:C.text, fontSize:11, fontWeight:800, marginBottom:4}}><span>{project.emoji || pilar.icon} {project.name}</span><span style={{color:pilar.cor}}>{pct}%</span></div>
+            <div style={{height:6, background:'#222', borderRadius:6, overflow:'hidden'}}><div style={{height:'100%', width:`${pct}%`, background:pilar.cor}} /></div>
+            <div style={{fontSize:9, color:C.textMuted, fontFamily:'monospace', marginTop:2}}>{done}/{total} blocos concluídos</div>
+          </div>)}
+        </div>
+      </SpotlightCard>}
+
       <div className="schedule-scroll" style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', border:`1px solid ${C.border}`, borderRadius:14, background:C.surface }}>
         <div style={{ minWidth: 900 }}>
           <div style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', position:'sticky', top:0, zIndex:2 }}>
             <div style={{ padding:10, background:'#111827', color:C.gold, fontSize:10, fontWeight:800, fontFamily:'monospace', borderRight:`1px solid ${C.border}` }}>HORÁRIO</div>
             {CRONOGRAMA_DIAS.map(d => <div key={d} style={{ padding:10, background:'#111827', color:C.text, fontSize:10, fontWeight:800, fontFamily:'monospace', textAlign:'center', borderRight:`1px solid ${C.border}` }}>{d}</div>)}
           </div>
-          {CRONOGRAMA_BLOCOS.map((bloco, bi) => {
-            const pilar = pilaresById[bloco.pilar];
+          {times.length === 0 && <div style={{padding:28, color:C.textMuted, textAlign:'center', fontSize:12, fontFamily:'monospace'}}>Seu cronograma ainda está vazio. Adicione blocos acima com base nos seus projetos.</div>}
+          {times.map(t => {
+            const itemsAtTime = enrichedSchedule.filter(item => item.time === t);
             return (
-              <div key={bi} style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', borderTop:`1px solid ${C.border}` }}>
-                <div style={{ padding:10, color:C.text, fontSize:11, fontWeight:800, fontFamily:'monospace', background:'#0F172A', borderRight:`1px solid ${C.border}` }}>{bloco.hora}</div>
+              <div key={t} style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', borderTop:`1px solid ${C.border}` }}>
+                <div style={{ padding:10, color:C.text, fontSize:11, fontWeight:800, fontFamily:'monospace', background:'#0F172A', borderRight:`1px solid ${C.border}` }}>{t}</div>
                 {CRONOGRAMA_DIAS.map((d, di) => {
-                  const active = bloco.dias.includes(di);
-                  const done = checked[`${bi}-${di}`];
+                  const dayItems = itemsAtTime.filter(item => (item.days || []).includes(di));
                   return (
-                    <div key={d} onClick={() => active && toggleSlot(bi, di)} style={{
-                      minHeight:70, padding:8, borderRight:`1px solid ${C.border}`, cursor:active?'pointer':'default',
-                      background: active ? (done ? `${pilar.cor}26` : `${pilar.cor}10`) : 'rgba(255,255,255,.015)',
-                      opacity: active ? 1 : .22, transition:'all .18s ease'
-                    }}>
-                      {active && <>
-                        <div style={{display:'flex', justifyContent:'space-between', gap:4, alignItems:'flex-start'}}>
-                          <span style={{fontSize:9, fontFamily:'monospace', fontWeight:900, color:done?pilar.cor:C.text}}>{bloco.titulo}</span>
-                          <span style={{fontSize:13}}>{done?'✅':pilar.icon}</span>
-                        </div>
-                        <div style={{fontSize:8.5, color:C.textMuted, lineHeight:1.35, marginTop:5}}>{bloco.detalhe}</div>
-                      </>}
+                    <div key={d} style={{minHeight:78, padding:6, borderRight:`1px solid ${C.border}`, background: dayItems.length ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.01)'}}>
+                      {dayItems.map(item => {
+                        const done = checked[`${item.id}-${di}`];
+                        return <div key={item.id} onClick={() => toggleSlot(item, di)} style={{padding:7, borderRadius:9, marginBottom:5, cursor:'pointer', border:`1px solid ${item.pilar.cor}55`, background:done?`${item.pilar.cor}2E`:`${item.pilar.cor}12`}}>
+                          <div style={{display:'flex', justifyContent:'space-between', gap:4, alignItems:'flex-start'}}>
+                            <span style={{fontSize:9, fontFamily:'monospace', fontWeight:900, color:done?item.pilar.cor:C.text}}>{item.titulo}</span>
+                            <span style={{fontSize:13}}>{done?'✅':item.pilar.icon}</span>
+                          </div>
+                          <div style={{fontSize:8.5, color:C.textMuted, lineHeight:1.35, marginTop:4}}>{item.detalhe}</div>
+                          <button onClick={(e)=>{e.stopPropagation(); removeScheduleItem(item.id);}} style={{marginTop:5, background:'transparent', border:'none', color:C.textMuted, fontSize:8, padding:0, cursor:'pointer'}}>remover</button>
+                        </div>;
+                      })}
                     </div>
                   );
                 })}
@@ -1879,7 +2004,7 @@ function TabCronograma({state, setState, toast}) {
       </div>
 
       <div style={{fontSize:10, color:C.textMuted, fontFamily:'monospace', marginTop:10, lineHeight:1.5}}>
-        Dica: deslize a tabela para o lado no celular. Use a aba RAMIFICAÇÕES para criar projetos específicos ligados aos pilares.
+        Fluxo correto: RAMIFICAÇÕES → criar projetos/etapas → CRONOGRAMA → distribuir blocos na semana → evolução geral calculada automaticamente.
       </div>
     </div>
   );
