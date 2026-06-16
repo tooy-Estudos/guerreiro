@@ -1,46 +1,94 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: 24, color: '#EF4444', background: '#0B0B0F', minHeight: '100vh',
+          fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: 16, boxSizing: 'border-box'
+        }}>
+          <h2 style={{ fontSize: 18, color: '#EF4444' }}>⚠️ Render Crash Detected</h2>
+          <pre style={{ background: '#15151C', padding: 12, borderRadius: 8, overflowX: 'auto', fontSize: 12, border: '1px solid #EF444433', color: '#F3F4F6' }}>
+            {this.state.error?.toString()}
+          </pre>
+          <pre style={{ background: '#15151C', padding: 12, borderRadius: 8, overflowX: 'auto', fontSize: 11, border: '1px solid #1F2937', color: '#9CA3AF', whiteSpace: 'pre-wrap' }}>
+            {this.state.error?.stack}
+          </pre>
+          <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={{
+            background: '#EF4444', color: '#0B0B0F', border: 'none', borderRadius: 8, padding: '12px 20px',
+            fontSize: 13, fontWeight: 'bold', cursor: 'pointer', fontFamily: 'inherit'
+          }}>
+            Limpar LocalStorage e Recarregar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── TOKENS E CONSTANTES ───
 const C = {
-  bg:'#0B0B0F', bgCard:'#101828', bgSub:'#1F2937', gold:'#C9A96A',
-  green:'#22C55E', yellow:'#F59E0B', red:'#EF4444', text:'#F8FAFC',
-  textSub:'#94A3B8', border:'#1F2937',
+  bg: '#0B0B0F',
+  surface: '#15151C',
+  accent: '#00D4FF',
+  success: '#10B981',
+  warning: '#F59E0B',
+  critical: '#EF4444',
+  text: '#F3F4F6',
+  textMuted: '#9CA3AF',
+  border: '#1F2937',
+  gold: '#C9A96A'
 };
 
-const CONSTITUTION = [
-  {n:1,icon:'✝️',titulo:'FÉ',principio:'A fé vem antes da produtividade.',pergunta:'Estou fortalecendo minha base ou apenas correndo atrás de resultados?',acao:'5 minutos de oração.'},
-  {n:2,icon:'🏠',titulo:'FAMÍLIA',principio:'A família vem antes do trabalho.',pergunta:'Estou presente ou apenas ocupado?',acao:'Conversa intencional de 10 minutos.'},
-  {n:3,icon:'⚖️',titulo:'VERDADE',principio:'A verdade vem antes do conforto.',pergunta:'Estou sendo honesto comigo mesmo?',acao:'Nomear o problema real.'},
-  {n:4,icon:'🔥',titulo:'DISCIPLINA',principio:'A disciplina vale mais que a motivação.',pergunta:'Estou esperando vontade ou escolhendo agir?',acao:'Executar 5 minutos da missão principal.'},
-  {n:5,icon:'📜',titulo:'OAB',principio:'A OAB permanece prioridade até aprovação.',pergunta:'Minha agenda reflete essa prioridade?',acao:'Resolver 5 questões agora.'},
-  {n:6,icon:'⚡',titulo:'EXECUÇÃO',principio:'Não consumir conteúdo antes de executar a missão.',pergunta:'Estou aprendendo ou apenas acumulando?',acao:'Aplicar algo imediatamente.'},
-  {n:7,icon:'🎯',titulo:'FUTURO',principio:'O Eu Presente protege o Eu Futuro.',pergunta:'Essa escolha ajuda ou prejudica meu futuro?',acao:'Escolher a opção de benefício composto.'},
-  {n:8,icon:'🔗',titulo:'CONSTÂNCIA',principio:'Nunca zerar voluntariamente.',pergunta:'Qual é a menor ação que mantém a corrente viva?',acao:'Executar versão mínima.'},
-  {n:9,icon:'🪨',titulo:'SIMPLICIDADE',principio:'Pequena execução vale mais que plano perfeito.',pergunta:'Estou complicando o que poderia ser simples?',acao:'Executar uma versão reduzida.'},
-  {n:10,icon:'🛡️',titulo:'CARÁTER',principio:'Nenhum resultado compensa perda de caráter.',pergunta:'Essa decisão preserva meus valores?',acao:'Escolher a opção correta, não a confortável.'},
+const PONTUACAO = {
+  MISSAO_DEFINIDA: 2,
+  MISSAO_CONCLUIDA: 3,
+  CORRECAO_FUGA: 2,
+  REFLEXAO_3_EUS: 1,
+  MODO_MINIMO_ATIVADO: 2
+};
+
+const LIFE_AREAS = [
+  { key: 'fe', label: 'FÉ', icon: '✝️', micro: 'Fé em baixa. Sugestão: [+ 5 MIN ORAÇÃO/MEDITAÇÃO]' },
+  { key: 'familia', label: 'FAMÍLIA', icon: '🏠', micro: 'Família negligenciada. Sugestão: [+ 10 MIN CONVERSA INTENCIONAL]' },
+  { key: 'saude', label: 'SAÚDE', icon: '❤️', micro: 'Saúde em baixa. Sugestão: [+ MOVIMENTO - CAMINHAR 15 MIN]' },
+  { key: 'estudo', label: 'ESTUDO', icon: '📚', micro: 'Estudo lento. Sugestão: [+ RESOLVER 5 QUESTÕES]' },
+  { key: 'carreira', label: 'CARREIRA', icon: '💼', micro: 'Carreira parada. Sugestão: [+ CONCLUIR 1 TAREFA DE IMPACTO]' }
 ];
 
-const WAR_CARDS = [
-  {id:'ms',titulo:'11 ANOS NA MAIS SAÚDE',cat:'Liderança',prova:'Você sabe permanecer e construir ao longo do tempo.',identidade:'Líder.',atitude:'Executar uma decisão difícil hoje.'},
-  {id:'cas',titulo:'CASAMENTO SÓLIDO',cat:'Família',prova:'Você é capaz de compromisso, presença e aliança.',identidade:'Homem de palavra.',atitude:'Estar presente de verdade hoje.'},
-  {id:'lid',titulo:'LIDERANÇA NA EMPRESA',cat:'Gestão',prova:'Você carrega pessoas, processos e resultados.',identidade:'Gestor confiável.',atitude:'Resolver algo que protege sua equipe.'},
-  {id:'aca',titulo:'APROVAÇÕES ACADÊMICAS',cat:'Direito',prova:'Constância produz resultado comprovado.',identidade:'Estudante disciplinado.',atitude:'Resolver questões antes de consumir.'},
-  {id:'tit',titulo:'TÍTULO MUNICIPAL',cat:'Superação',prova:'Disciplina coletiva gera vitória real.',identidade:'Competidor resiliente.',atitude:'Sustentar o esforço sem vontade hoje.'},
-  {id:'pro',titulo:'PROJETOS IMPLANTADOS',cat:'Execução',prova:'Você transforma ideias em estrutura.',identidade:'Executor.',atitude:'Concluir uma versão simples hoje.'},
+const PILARES_CONSTITUICAO = [
+  { id: 'fe', icon: '✝️', pilar: 'Fé', diretriz: 'Fortalecer a espiritualidade diariamente antes de focar nos negócios.' },
+  { id: 'familia', icon: '🏠', pilar: 'Família', diretriz: 'Priorizar tempo de presença e conexão intencional em casa.' },
+  { id: 'verdade', icon: '⚖️', pilar: 'Verdade', diretriz: 'Olhar de frente para falhas e problemas, sem justificativas.' },
+  { id: 'disciplina', icon: '🔥', pilar: 'Disciplina', diretriz: 'Agir por dever e constância, nunca esperando ter vontade.' },
+  { id: 'foco', icon: '🎯', pilar: 'Foco', diretriz: 'Executar a missão crítica antes de consumir qualquer entretenimento.' },
+  { id: 'execucao', icon: '⚡', pilar: 'Execução', diretriz: 'Fazer o rascunho rápido. A clareza vem com o movimento.' },
+  { id: 'futuro', icon: '📜', pilar: 'Futuro', diretriz: 'O Eu Presente deve proteger e construir a base do Eu Futuro.' },
+  { id: 'constancia', icon: '🔗', pilar: 'Constância', diretriz: 'Evitar zerar o dia a todo custo. Manter a corrente ativa.' },
+  { id: 'simplicidade', icon: '🪨', pilar: 'Simplicidade', diretriz: 'Dividir grandes projetos em ações simples de 5 minutos.' },
+  { id: 'carater', icon: '🛡️', pilar: 'Caráter', diretriz: 'Manter a palavra dada e cumprir as promessas de forma íntegra.' }
 ];
 
-const ESCAPES = [
-  {id:'plan',label:'Planejamento infinito',diag:'Você está usando organização como substituto da execução.',verdade:'Já existe clareza suficiente para agir.',acao:'Execute 5 minutos da missão principal agora.',btn:'EXECUTAR AGORA'},
-  {id:'pesq',label:'Pesquisa excessiva',diag:'Você está buscando mais informação do que precisa.',verdade:'O próximo ganho vem da prática.',acao:'Aplicar imediatamente o que já aprendeu.',btn:'APLICAR AGORA'},
-  {id:'perf',label:'Perfeccionismo',diag:'Você está esperando a condição perfeita.',verdade:'Progresso imperfeito gera resultado.',acao:'Concluir uma versão simples agora.',btn:'FINALIZAR VERSÃO SIMPLES'},
-];
-
-const PANEL_AREAS = [
-  {key:'fe',label:'Fé',icon:'✝️',micro:'Oração de 5 minutos.'},
-  {key:'familia',label:'Família',icon:'🏠',micro:'Conversa intencional de 10 minutos.'},
-  {key:'saude',label:'Saúde',icon:'❤️',micro:'Caminhar 10 minutos.'},
-  {key:'estudo',label:'Estudo',icon:'📚',micro:'Resolver 5 questões.'},
-  {key:'empresa',label:'Empresa',icon:'💼',micro:'Resolver uma pendência crítica.'},
+const THEME_COLORS = [
+  { hex: '#00D4FF', name: 'Cyan' },
+  { hex: '#10B981', name: 'Verde' },
+  { hex: '#F59E0B', name: 'Amarelo' },
+  { hex: '#EF4444', name: 'Vermelho' },
+  { hex: '#A855F7', name: 'Roxo' },
+  { hex: '#EC4899', name: 'Rosa' }
 ];
 
 const CRONOGRAMA_PILARES = [
@@ -86,68 +134,159 @@ const CRONOGRAMA_PILARES = [
   }
 ];
 
-const scoreColor = s => s<=3?C.red:s<=5?C.yellow:s<=7?C.text:s<=9?C.green:C.gold;
-const scoreLabel = s => s<=3?'DIA FRACO':s<=5?'DIA MÍNIMO':s<=7?'DIA BOM':s<=9?'DIA FORTE':'DIA ELITE';
+function classificarDia(score) {
+  if (score <= 3) return { label: "DIA FRACO", color: C.critical };
+  if (score <= 5) return { label: "DIA MÍNIMO", color: C.textMuted };
+  if (score <= 7) return { label: "DIA BOM", color: C.warning };
+  if (score <= 9) return { label: "DIA FORTE", color: C.accent };
+  return { label: "DIA ELITE", color: C.success };
+}
+
 const dateDisplay = () => {
-  const d=new Date(),dd=['DOM','SEG','TER','QUA','QUI','SEX','SÁB'],
-  mm=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  const d = new Date(), dd = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'],
+    mm = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   return `${dd[d.getDay()]}, ${d.getDate()} ${mm[d.getMonth()]}`;
 };
 
-function Label({text,color=C.textSub}){
-  return <div style={{fontSize:10,fontFamily:'monospace',letterSpacing:'0.2em',color,textTransform:'uppercase',marginBottom:8}}>{text}</div>;
-}
-
-function Btn({label,variant='primary',onClick,disabled,full,small}){
-  const v={primary:{background:C.gold,color:'#0B0B0F',border:'none'},
-    secondary:{background:'transparent',color:C.gold,border:`1.5px solid ${C.gold}`},
-    critical:{background:C.red,color:C.text,border:'none'}}[variant];
-  return <button onClick={onClick} disabled={disabled} style={{...v,borderRadius:12,
-    padding:small?'8px 14px':'13px 20px',fontFamily:'monospace',fontWeight:700,
-    fontSize:small?10:12,letterSpacing:'0.08em',cursor:disabled?'default':'pointer',
-    opacity:disabled?0.4:1,width:full?'100%':'auto',transition:'opacity 0.15s',whiteSpace:'nowrap'}}
-    onMouseEnter={e=>{if(!disabled)e.target.style.opacity='0.82'}}
-    onMouseLeave={e=>{if(!disabled)e.target.style.opacity='1'}}>{label}</button>;
-}
-
-function Toast({msg}){
-  if(!msg)return null;
-  return <div style={{position:'fixed',top:72,left:'50%',transform:'translateX(-50%)',
-    background:C.bgCard,border:`1px solid ${C.green}66`,borderRadius:10,padding:'10px 20px',
-    zIndex:9999,display:'flex',alignItems:'center',gap:8}}>
-    <div style={{width:6,height:6,borderRadius:'50%',background:C.green}}/>
-    <span style={{fontSize:12,color:C.text,fontFamily:'monospace',letterSpacing:'0.04em'}}>{msg}</span>
-  </div>;
-}
-
-function Timer90({onClose,onComplete}){
-  const [t,setT]=useState(90);
-  const done=t<=0;
-  useEffect(()=>{const id=setInterval(()=>setT(p=>p<=1?0:p-1),1000);return()=>clearInterval(id)},[]);
-  const r=72,circ=2*Math.PI*r,pct=(90-t)/90;
-  return <div style={{position:'fixed',inset:0,background:'rgba(11,11,15,0.97)',display:'flex',
-    flexDirection:'column',alignItems:'center',justifyContent:'center',zIndex:500,padding:32}}>
-    <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.2em',marginBottom:24}}>PROTOCOLO DE 90 SEGUNDOS</div>
-    <div style={{position:'relative',width:168,height:168,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:32}}>
-      <svg width={168} height={168} style={{position:'absolute',transform:'rotate(-90deg)'}}>
-        <circle cx={84} cy={84} r={r} fill="none" stroke={C.bgSub} strokeWidth={4}/>
-        <circle cx={84} cy={84} r={r} fill="none" stroke={C.gold} strokeWidth={4} strokeLinecap="round"
-          strokeDasharray={circ} strokeDashoffset={circ*(1-pct)} style={{transition:'stroke-dashoffset 1s linear'}}/>
-      </svg>
-      <span style={{fontFamily:'monospace',fontSize:56,fontWeight:700,color:C.text}}>{done?'✓':t}</span>
+// ─── COMPONENTES UI REUTILIZÁVEIS ───
+function Label({ text, color = C.textMuted }) {
+  return (
+    <div style={{
+      fontSize: 10,
+      fontFamily: 'monospace',
+      letterSpacing: '0.15em',
+      color: color,
+      textTransform: 'uppercase',
+      marginBottom: 10,
+      fontWeight: 'bold'
+    }}>
+      {text}
     </div>
-    <div style={{textAlign:'center',marginBottom:32}}>
-      <p style={{color:C.text,fontSize:18,fontWeight:600,margin:'0 0 8px'}}>Respire.</p>
-      <p style={{color:C.textSub,fontSize:14,margin:'0 0 4px'}}>Pare de negociar.</p>
-      <p style={{color:C.textSub,fontSize:14,margin:0}}>Faça a primeira ação.</p>
-    </div>
-    {done?<Btn label="INICIAR AÇÃO DO GUERREIRO ⚔️" onClick={onComplete}/>
-      :<button onClick={onClose} style={{background:'none',border:'none',color:C.textSub,fontSize:12,cursor:'pointer',fontFamily:'monospace'}}>cancelar</button>}
-  </div>;
+  );
 }
 
-// ─── ABA HOJE ───
-// ─── COMPONENTE SPOTLIGHT CARD (FILOSOFIA REACT BITS) ───
+function Btn({ label, variant = 'primary', onClick, disabled, full, small, activeColor = C.accent }) {
+  const styles = {
+    primary: { background: activeColor, color: C.bg, border: 'none' },
+    secondary: { background: 'transparent', color: activeColor, border: `1.5px solid ${activeColor}` },
+    success: { background: C.success, color: C.bg, border: 'none' },
+    critical: { background: C.critical, color: C.text, border: 'none' }
+  }[variant];
+
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      ...styles, borderRadius: 8, padding: small ? '6px 12px' : '12px 18px',
+      fontFamily: 'inherit', fontWeight: 700, fontSize: small ? 11 : 13,
+      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
+      width: full ? '100%' : 'auto', transition: 'all 0.15s ease', whiteSpace: 'nowrap',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6
+    }}
+      onMouseEnter={e => { if (!disabled) e.target.style.filter = 'brightness(1.15)' }}
+      onMouseLeave={e => { if (!disabled) e.target.style.filter = 'none' }}>
+      {label}
+    </button>
+  );
+}
+
+function Toast({ toastObj, onClose, activeColor = C.accent }) {
+  useEffect(() => {
+    if (toastObj) {
+      const id = setTimeout(onClose, 3000);
+      return () => clearTimeout(id);
+    }
+  }, [toastObj, onClose]);
+
+  if (!toastObj) return null;
+  const { msg, type } = toastObj;
+  
+  const icon = {
+    success: '✓',
+    error: '✗',
+    info: 'ℹ',
+    warning: '!'
+  }[type] || 'ℹ';
+
+  const borderColor = {
+    success: C.success,
+    error: C.critical,
+    info: activeColor,
+    warning: C.warning
+  }[type] || activeColor;
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, right: 24,
+      background: C.surface, border: `1px solid ${borderColor}`, borderRadius: 8,
+      padding: '12px 20px', zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.5)', animation: 'slideIn 0.3s ease-out', maxWidth: 360
+    }}>
+      <div style={{
+        width: 20, height: 20, borderRadius: '50%', background: `${borderColor}22`,
+        border: `1.2px solid ${borderColor}`, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', fontSize: 11, fontWeight: 'bold', color: borderColor
+      }}>{icon}</div>
+      <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{msg}</span>
+      <button onClick={onClose} style={{
+        background: 'none', border: 'none', color: C.textMuted, fontSize: 14,
+        marginLeft: 10, cursor: 'pointer'
+      }}>×</button>
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ActionBreathing({ duration = 90, title = "🫁 PROTOCOLO DE RESPIRAÇÃO", subtitle = "", onComplete, onClose, activeColor = C.accent }) {
+  const [t, setT] = useState(duration);
+  const done = t <= 0;
+
+  useEffect(() => {
+    const id = setInterval(() => setT(p => p <= 1 ? 0 : p - 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const r = 70, circ = 2 * Math.PI * r, pct = (duration - t) / duration;
+  const breatheState = t % 6 < 3 ? 'INSPIRE...' : 'EXPIRE...';
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(11,11,15,0.97)', display: 'flex',
+      flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 24
+    }}>
+      <div style={{ fontSize: 11, fontFamily: 'monospace', color: activeColor, letterSpacing: '0.25em', marginBottom: 20 }}>{title}</div>
+      <div style={{ position: 'relative', width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+        <svg width={160} height={160} style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
+          <circle cx={80} cy={80} r={r} fill="none" stroke="#222" strokeWidth={3} />
+          <circle cx={80} cy={80} r={r} fill="none" stroke={activeColor} strokeWidth={3} strokeLinecap="round"
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - pct)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
+        </svg>
+        <span style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: '0.05em', animation: 'pulsing 3s infinite ease-in-out' }}>
+          {done ? 'CONCLUÍDO' : breatheState}
+        </span>
+      </div>
+      <div style={{ textAlign: 'center', marginBottom: 30, maxWidth: 300 }}>
+        <p style={{ color: C.textMuted, fontSize: 13, lineHeight: 1.4 }}>{subtitle}</p>
+        {!done && <p style={{ color: activeColor, fontFamily: 'JetBrains Mono, monospace', fontSize: 15, marginTop: 10 }}>{t}s</p>}
+      </div>
+      {done ? (
+        <Btn label="RETOMAR FOCO ✓" onClick={onComplete} variant="success" activeColor={activeColor} />
+      ) : (
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace' }}>cancelar</button>
+      )}
+      <style>{`
+        @keyframes pulsing {
+          0%, 100% { transform: scale(1); opacity: 0.7; }
+          50% { transform: scale(1.05); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function SpotlightCard({ children, style = {}, className = "" }) {
   const [coords, setCoords] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
@@ -193,999 +332,1680 @@ function SpotlightCard({ children, style = {}, className = "" }) {
   );
 }
 
-// ─── ABA HOJE ───
-function TabHoje({state,setState,toast}){
-  const [showModal,setShowModal]=useState(false);
-  const [mTitulo,setMTitulo]=useState('');
-  const [mProva,setMProva]=useState('');
-  const [mArea,setMArea]=useState('fe'); // Área associada
-  const [showTimer,setShowTimer]=useState(false);
-  const [activeEscape,setActiveEscape]=useState(null);
-  const [escapeOpen,setEscapeOpen]=useState(false);
+// ─── DASHBOARD PRINCIPAL ───
+function DashboardMain({ state, setState, triggerToast, score, classObj }) {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [projName, setProjName] = useState('');
+  const [projDesc, setProjDesc] = useState('');
+  const [projEmoji, setProjEmoji] = useState('📚');
+  const [projColor, setProjColor] = useState('#00D4FF');
+  const [projObj, setProjObj] = useState('Aprender');
+  const [projTarget, setProjTarget] = useState('ongoing');
 
-  const f=state.flags;
-  const score=(f.missao?2:0)+(f.acao?3:0)+(f.fuga?2:0)+(f.eus?1:0)+(f.naoZerou?2:0);
-  const actionDone=state.action?.status==='done';
+  // Identidade states
+  const [activePilar, setActivePilar] = useState(null);
+  const [editPrincId, setEditPrincId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editAction, setEditAction] = useState('');
 
-  // Diagnóstico Vivo — regra fixa, sem IA: primeira fuga não corrigida
-  const pendingEscape=ESCAPES.find(e=>!state.fixedEscapes.includes(e.id));
-  const diagnostico=pendingEscape
-    ?{risco:pendingEscape.label.toLowerCase(),acao:pendingEscape.acao}
-    :{risco:null,acao:'Mantenha o foco na missão. Execute antes de consumir.'};
+  const EMOJIS = ['📚', '📱', '🏋️', '💼', '🎯', '🎨', '🚀', '❤️', '💡', '🔥'];
 
-  const setFlag=(k,v=true)=>setState(s=>({...s,flags:{...s.flags,[k]:v}}));
-
-  const confirmMission=()=>{
-    if(!mTitulo.trim()||!mProva.trim())return;
-    const areaObj = PANEL_AREAS.find(a=>a.key===mArea);
-    setState(s=>({...s,mission:{titulo:mTitulo.trim(),prova:mProva.trim(),area:mArea},
-      action:{desc:`[${areaObj.icon} ${areaObj.label}] Prova: ${mProva.trim()}`,status:'pendente'},
-      flags:{...s.flags,missao:true}}));
-    setShowModal(false);setMTitulo('');setMProva('');toast('Missão definida. +2 pontos.');
+  const handleCreateProject = () => {
+    if (!projName.trim()) return;
+    const newProj = {
+      id: 'proj-' + Date.now(),
+      name: projName.trim(),
+      description: projDesc.trim(),
+      emoji: projEmoji,
+      color: projColor,
+      objective: projObj,
+      target: projTarget,
+      defaultTimer: 1500,
+      roadmap: [],
+      notes: []
+    };
+    setState(s => ({
+      ...s,
+      projects: [...(s.projects || []), newProj]
+    }));
+    setShowCreateModal(false);
+    setProjName('');
+    setProjDesc('');
+    setProjEmoji('📚');
+    setProjColor('#00D4FF');
+    triggerToast('Projeto criado com sucesso!', 'success');
   };
 
-  const opState=state.opState;
-  const setOp=v=>setState(s=>({...s,opState:s.opState===v?null:v}));
-
-  // contagem de fugas pendentes para o cabeçalho do detector
-  const pendingCount=ESCAPES.filter(e=>!state.fixedEscapes.includes(e.id)).length;
-
-  const handleTimerComplete = () => {
-    setShowTimer(false);
-    setState(s => ({ ...s, opState: 'exec' }));
-    toast('Guerreiro Ativado! Menos análise, mais ação.');
+  const handlePilarCheck = (pilarId) => {
+    setState(s => {
+      const current = s.constitutionChecks || {};
+      return { ...s, constitutionChecks: { ...current, [pilarId]: !current[pilarId] } };
+    });
+    triggerToast('Pilar atualizado!', 'success');
   };
 
-  return <div className="two-col-grid" style={{padding:'14px 16px 100px'}}>
-    {showTimer&&<Timer90 onClose={()=>{setShowTimer(false);setOp(null)}} onComplete={handleTimerComplete}/>}
-
-    {/* MODAL MISSÃO */}
-    {showModal&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',
-      alignItems:'flex-end',justifyContent:'center',zIndex:400}} onClick={()=>setShowModal(false)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.bgCard,borderRadius:'20px 20px 0 0',
-        padding:'24px 20px 40px',width:'100%',maxWidth:480,border:`1px solid ${C.gold}4D`}}>
-        <div style={{width:40,height:4,background:C.bgSub,borderRadius:2,margin:'0 auto 24px'}}/>
-        <Label text="⚡ DEFINIR MISSÃO DO DIA" color={C.gold}/>
-        <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',letterSpacing:'0.08em',marginBottom:6}}>QUAL É SUA MISSÃO HOJE?</div>
-        <input value={mTitulo} onChange={e=>setMTitulo(e.target.value)} placeholder="Aprovação OAB..."
-          style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',color:C.text,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:14}}/>
-        <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',letterSpacing:'0.08em',marginBottom:6}}>QUAL É A PROVA DE EXECUÇÃO?</div>
-        <input value={mProva} onChange={e=>setMProva(e.target.value)} placeholder="Resolver 10 questões..."
-          style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',color:C.text,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:14}}/>
-        
-        <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',letterSpacing:'0.08em',marginBottom:8}}>ÁREA DO PAINEL ASSOCIADA</div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:24}}>
-          {PANEL_AREAS.map(a => {
-            const selected = mArea === a.key;
-            return (
-              <button
-                key={a.key}
-                onClick={() => setMArea(a.key)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  cursor: 'pointer',
-                  border: `1.5px solid ${selected ? C.gold : C.border}`,
-                  background: selected ? 'rgba(201,169,106,0.12)' : 'transparent',
-                  color: selected ? C.gold : C.textSub,
-                  transition: 'all 0.15s'
-                }}
-              >
-                {a.icon} {a.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <Btn label="CONFIRMAR MISSÃO ✓" full disabled={!mTitulo.trim()||!mProva.trim()} onClick={confirmMission}/>
-      </div>
-    </div>}
-
-    {/* Coluna da Esquerda (Foco/Execução) */}
-    <div style={{display:'flex', flexDirection:'column', gap:12}}>
-      {/* 1. MISSÃO CRÍTICA */}
-      {state.mission?
-        <SpotlightCard style={{background:'linear-gradient(135deg,#101828,#0D1F35)',border:`1.5px solid ${C.gold}`,
-          borderRadius:16,padding:'14px 16px'}}>
-          <div style={{position:'absolute',top:-20,right:-20,width:70,height:70,borderRadius:'50%',background:'rgba(201,169,106,0.07)'}}/>
-          <Label text="⚡ MISSÃO CRÍTICA" color={C.gold}/>
-          <div style={{fontSize:22,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.15,marginBottom:10}}>
-            {state.mission.titulo}
-          </div>
-          <div style={{display:'flex',gap:6}}>
-            <div style={{display:'inline-flex',gap:6,background:'rgba(201,169,106,0.12)',
-              border:'1px solid rgba(201,169,106,0.25)',borderRadius:7,padding:'5px 10px'}}>
-              <span style={{fontSize:10,color:C.gold,fontFamily:'monospace'}}>🎯 {state.mission.prova}</span>
-            </div>
-            {state.mission.area && (
-              <div style={{display:'inline-flex',gap:6,background:C.bgSub,
-                border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 10px'}}>
-                <span style={{fontSize:10,color:C.textSub,fontFamily:'monospace'}}>
-                  {PANEL_AREAS.find(a=>a.key===state.mission.area)?.icon} {PANEL_AREAS.find(a=>a.key===state.mission.area)?.label.toUpperCase()}
-                </span>
-              </div>
-            )}
-          </div>
-        </SpotlightCard>
-        :<div onClick={()=>setShowModal(true)} style={{background:C.bgCard,border:`1.5px dashed ${C.gold}4D`,
-          borderRadius:16,padding:'14px 16px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:'pointer',minHeight:96}}>
-          <Label text="⚡ MISSÃO CRÍTICA" color={C.gold}/>
-          <div style={{fontSize:19,fontFamily:'Georgia,serif',color:C.textSub,marginBottom:8}}>Qual é sua missão hoje?</div>
-          <div style={{fontSize:11,color:C.gold,fontFamily:'monospace'}}>Toque para definir →</div>
-        </div>}
-
-      {/* 2. AÇÃO DO GUERREIRO */}
-      <SpotlightCard style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,padding:'14px 16px'}}>
-        <Label text="⚔️ AÇÃO DO GUERREIRO"/>
-        {!state.mission
-          ?<div style={{fontSize:13,color:C.textSub,marginBottom:12}}>Defina sua missão primeiro.</div>
-          :<>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6,lineHeight:1.4}}>{state.action?.desc}</div>
-            <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace',marginBottom:12}}>⏱ 25 min</div>
-          </>}
-        {state.mission&&state.action?.status==='pendente'&&
-          <Btn label="⚡ EXECUTAR AGORA" full onClick={()=>setState(s=>({...s,action:{...s.action,status:'exec'}}))}/>}
-        {state.action?.status==='exec'&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
-          <div style={{padding:'9px 12px',background:'rgba(201,169,106,0.08)',border:'1px solid rgba(201,169,106,0.25)',
-            borderRadius:8,fontSize:11,color:C.gold,fontFamily:'monospace'}}>⏳ Executando...</div>
-          <Btn label="✓ MARCAR COMO CONCLUÍDA" variant="secondary" full onClick={()=>{
-            setState(s=>({
-              ...s,
-              action:{...s.action,status:'done'},
-              flags:{...s.flags,acao:true,naoZerou:true},
-              streak: s.flags.naoZerou ? s.streak : s.streak + 1,
-              panel: s.mission?.area ? { ...s.panel, [s.mission.area]: 3 } : s.panel
-            }));
-            toast(state.mission?.area ? `Missão executada. Área ${PANEL_AREAS.find(a=>a.key===state.mission.area)?.label} no máximo!` : 'Missão executada. +3 pontos.');}}/>
-        </div>}
-        {state.action?.status==='done'&&
-          <div style={{color:C.green,fontSize:13,fontFamily:'monospace',fontWeight:700}}>✓ CONCLUÍDA</div>}
-        {!state.mission&&
-          <Btn label="⚡ EXECUTAR AGORA" full disabled/>}
-      </SpotlightCard>
-
-      {/* 3. ESTADOS OPERACIONAIS */}
-      <div style={{display:'flex',flexDirection:'column',gap:6}}>
-        <div style={{display:'flex',gap:6}}>
-          {[{id:'exec',l:'EXECUÇÃO',c:C.green},{id:'trav',l:'TRAVADO',c:C.red},{id:'cans',l:'CANSAÇO',c:C.yellow}].map(s=>{
-            const a=opState===s.id;
-            return <button key={s.id}
-              onClick={()=>{if(s.id==='trav'){setOp('trav');setShowTimer(true)}else setOp(s.id)}}
-              style={{flex:1,height:32,borderRadius:8,border:`1px solid ${a?s.c:C.border}`,
-                background:a?`${s.c}18`:'transparent',color:a?s.c:C.textSub,
-                fontFamily:'monospace',fontWeight:700,fontSize:9,letterSpacing:'0.04em',cursor:'pointer'}}>
-              {s.l}
-            </button>;
-          })}
-        </div>
-        {opState==='exec'&&<div style={{background:'rgba(34,197,94,0.08)',border:'1px solid rgba(34,197,94,0.12)',
-          borderRadius:8,padding:'8px 12px'}}>
-          <div style={{fontSize:12,color:C.textSub,fontStyle:'italic'}}>"Menos análise. Mais ação."</div>
-        </div>}
-        {opState==='cans'&&<div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.12)',
-          borderRadius:8,padding:'12px'}}>
-          <div style={{fontSize:9,fontFamily:'monospace',color:C.yellow,letterSpacing:'0.15em',marginBottom:6}}>MODO MÍNIMO</div>
-          <div style={{fontSize:12,color:C.textSub,marginBottom:10}}>Hoje não precisa ser perfeito. Só não pode zerar.</div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
-            {['1 questão','1 página','5 minutos','1 oração'].map(o=>
-              <span key={o} onClick={()=>setState(s=>({...s,tiredChip:o}))}
-                style={{padding:'5px 10px',borderRadius:7,fontSize:11,cursor:'pointer',fontFamily:'monospace',
-                  border:`1px solid ${state.tiredChip===o?C.yellow:'rgba(245,158,11,0.25)'}`,
-                  background:state.tiredChip===o?'rgba(245,158,11,0.2)':'rgba(245,158,11,0.07)',
-                  color:C.yellow}}>{o}</span>)}
-          </div>
-          {state.tiredChip&&<button
-            onClick={()=>{
-              setState(s => ({
-                ...s,
-                flags: { ...s.flags, naoZerou: true },
-                streak: s.flags.naoZerou ? s.streak : s.streak + 1,
-                opState: null,
-                tiredChip: null
-              }));
-              toast('Dia protegido.');
-            }}
-            style={{width:'100%',height:36,borderRadius:8,background:C.yellow,border:'none',
-              color:'#0B0B0F',fontFamily:'monospace',fontWeight:700,fontSize:11,cursor:'pointer'}}>
-            NÃO ZERAR HOJE
-          </button>}
-        </div>}
-      </div>
-    </div>
-
-    {/* Coluna da Direita (Status/Resiliência) */}
-    <div style={{display:'flex', flexDirection:'column', gap:12}}>
-      {/* 4. RISCO PRINCIPAL */}
-      {!actionDone&&pendingEscape&&<div style={{background:'rgba(245,158,11,0.07)',
-        border:'1px solid rgba(245,158,11,0.18)',borderRadius:10,padding:'10px 14px',
-        display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
-        <div>
-          <div style={{fontSize:9,fontFamily:'monospace',color:C.yellow,letterSpacing:'0.15em',marginBottom:3}}>
-            RISCO PRINCIPAL
-          </div>
-          <div style={{fontSize:13,color:C.text,fontWeight:600}}>{pendingEscape.label}</div>
-        </div>
-        <div style={{fontSize:11,color:C.textSub,textAlign:'right',flexShrink:0}}>
-          Execute 5 min agora.
-        </div>
-      </div>}
-
-      {/* 5. SCORE + STREAK */}
-      {actionDone
-        ?<div style={{display:'flex',gap:8}}>
-            <div style={{flex:1,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,padding:14}}>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.1em',marginBottom:4}}>SCORE DO DIA</div>
-              <div style={{fontFamily:'monospace',fontSize:28,fontWeight:700,color:scoreColor(score),lineHeight:1}}>{score}</div>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,marginTop:3}}>{scoreLabel(score)}</div>
-            </div>
-            <div style={{flex:1,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,padding:14}}>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.1em',marginBottom:4}}>SEM ZERAR</div>
-              <div style={{fontFamily:'monospace',fontSize:28,fontWeight:700,color:C.gold,lineHeight:1}}>
-                {state.streak}<span style={{fontSize:12,color:C.textSub}}>/30</span>
-              </div>
-              <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,marginTop:3}}>Meta atual</div>
-            </div>
-          </div>
-        :<div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,
-            padding:'11px 16px',textAlign:'center'}}>
-            <span style={{fontSize:12,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.06em'}}>
-              Pronto para começar
-            </span>
-          </div>}
-
-      {/* 6. DETECTOR DE FUGA */}
-      <div>
-        <button onClick={()=>setEscapeOpen(o=>!o)} style={{width:'100%',display:'flex',
-          justifyContent:'space-between',alignItems:'center',background:'transparent',
-          border:'none',cursor:'pointer',padding:'4px 0',marginBottom:escapeOpen?6:0}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.2em'}}>🔍 DETECTOR DE FUGA</span>
-            {pendingCount>0&&<span style={{fontSize:9,fontFamily:'monospace',color:C.red,
-              background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.25)',
-              borderRadius:5,padding:'2px 6px'}}>{pendingCount} pendente{pendingCount>1?'s':''}</span>}
-            {pendingCount===0&&<span style={{fontSize:9,fontFamily:'monospace',color:C.green}}>✓ ok</span>}
-          </div>
-          <span style={{fontSize:11,fontFamily:'monospace',color:C.gold}}>{escapeOpen?'▲':'▼'}</span>
-        </button>
-        {escapeOpen&&<div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-          {ESCAPES.map((e,i)=>{
-            const fixed=state.fixedEscapes.includes(e.id);
-            const exp=activeEscape===e.id;
-            return <div key={e.id}>
-              {i>0&&<div style={{height:1,background:C.border}}/>}
-              <button onClick={()=>!fixed&&setActiveEscape(exp?null:e.id)}
-                style={{width:'100%',height:44,padding:'0 14px',display:'flex',
-                  justifyContent:'space-between',alignItems:'center',background:'transparent',
-                  border:'none',cursor:fixed?'default':'pointer'}}>
-                <span style={{fontSize:12,color:fixed?C.green:C.textSub}}>{fixed?'✓ ':''}{e.label}</span>
-                <span style={{fontSize:14,fontFamily:'monospace',color:fixed?C.green:C.gold}}>
-                  {fixed?'✓':exp?'−':'+'}
-                </span>
-              </button>
-              {exp&&!fixed&&<div style={{padding:'12px 14px 14px',background:C.bgSub}}>
-                <div style={{fontSize:9,fontFamily:'monospace',color:C.red,letterSpacing:'0.15em',marginBottom:3}}>DIAGNÓSTICO</div>
-                <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.5}}>{e.diag}</div>
-                <div style={{fontSize:9,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:3}}>VERDADE</div>
-                <div style={{fontSize:12,color:C.textSub,marginBottom:10}}>{e.verdade}</div>
-                <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:3}}>AÇÃO CORRETIVA</div>
-                <div style={{fontSize:12,color:C.text,marginBottom:12}}>{e.acao}</div>
-                <Btn label={e.btn} variant="secondary" full onClick={()=>{
-                  setState(s=>({
-                    ...s,
-                    fixedEscapes:[...s.fixedEscapes,e.id],
-                    flags:{...s.flags,fuga:true},
-                    action: { desc: `[CORREÇÃO DE FUGA] ${e.acao}`, status: 'pendente' }
-                  }));
-                  setActiveEscape(null);
-                  toast('Fuga corrigida. Ação injetada no Guerreiro!');
-                }}/>
-              </div>}
-            </div>;
-          })}
-        </div>}
-      </div>
-    </div>
-  </div>;
-}
-
-
-
-// ─── ABA IDENTIDADE ───
-function TabIdentidade({state,setState,toast}){
-  const [warIdx,setWarIdx]=useState(0);
-  const [artIdx,setArtIdx]=useState(0);
-  const [showConfrontar,setShowConfrontar]=useState(false);
-  const e=state.eus;
-  const setEu=(k,v)=>setState(s=>({...s,eus:{...s.eus,[k]:v},eusSaved:false}));
-
-  const wcard=WAR_CARDS[warIdx];
-  const artig=CONSTITUTION[artIdx];
-  const prevWar=()=>setWarIdx(i=>(i-1+WAR_CARDS.length)%WAR_CARDS.length);
-  const nextWar=()=>setWarIdx(i=>(i+1)%WAR_CARDS.length);
-  const prevArt=()=>setArtIdx(i=>(i-1+CONSTITUTION.length)%CONSTITUTION.length);
-  const nextArt=()=>setArtIdx(i=>(i+1)%CONSTITUTION.length);
-
-  return <div className="two-col-grid" style={{padding:'20px 16px 100px'}}>
-
-    {/* MODAL CONFRONTAR */}
-    {showConfrontar&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',
-      alignItems:'flex-end',justifyContent:'center',zIndex:400}} onClick={()=>setShowConfrontar(false)}>
-      <div onClick={ev=>ev.stopPropagation()} style={{background:C.bgCard,borderRadius:'20px 20px 0 0',
-        padding:'24px 20px 40px',width:'100%',maxWidth:480,border:`1px solid ${C.gold}4D`}}>
-        <div style={{width:40,height:4,background:C.bgSub,borderRadius:2,margin:'0 auto 24px'}}/>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em',marginBottom:4}}>
-          {artig.icon} ART. {artig.n} — {artig.titulo}
-        </div>
-        <div style={{fontSize:22,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.3,marginBottom:20}}>
-          {artig.principio}
-        </div>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:6}}>CONFRONTO</div>
-        <div style={{fontSize:14,color:C.text,fontStyle:'italic',marginBottom:20,lineHeight:1.5}}>
-          "{artig.pergunta}"
-        </div>
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:6}}>AÇÃO MÍNIMA</div>
-        <div style={{fontSize:14,color:C.text,marginBottom:28,lineHeight:1.4}}>{artig.acao}</div>
-        <Btn label="ENTENDIDO ✓" variant="secondary" full onClick={()=>setShowConfrontar(false)}/>
-      </div>
-    </div>}
-
-    {/* Coluna da Esquerda (Identidade/Histórico) */}
-    <div style={{display:'flex', flexDirection:'column', gap:14}}>
-      {/* 1. MEMÓRIA DE GUERRA — card único + navegação */}
-      <SpotlightCard style={{background:'linear-gradient(135deg,#0D0D0D,#1A1206)',
-        border:'1.5px solid rgba(201,169,106,0.4)',borderRadius:20,padding:20}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em'}}>🏆 MEMÓRIA DE GUERRA</div>
-          <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub}}>{warIdx+1}/{WAR_CARDS.length}</div>
-        </div>
-
-        <div style={{fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,marginBottom:4}}>{wcard.titulo}</div>
-        <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:16}}>
-          {wcard.cat.toUpperCase()}
-        </div>
-
-        <div style={{height:1,background:C.border,marginBottom:16}}/>
-
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:6}}>ISTO PROVA</div>
-        <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:14}}>{wcard.prova}</div>
-
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:4}}>IDENTIDADE</div>
-        <div style={{fontSize:14,color:C.gold,marginBottom:14,fontWeight:600}}>{wcard.identidade}</div>
-
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.15em',marginBottom:4}}>ATITUDE DE HOJE</div>
-        <div style={{fontSize:14,color:C.text,lineHeight:1.4,marginBottom:20}}>{wcard.atitude}</div>
-
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <button onClick={prevWar} style={{background:'transparent',border:`1px solid ${C.border}`,
-            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-            ← anterior
-          </button>
-          <div style={{display:'flex',gap:4}}>
-            {WAR_CARDS.map((_,i)=><div key={i} style={{width:6,height:6,borderRadius:'50%',
-              background:i===warIdx?C.gold:C.border}}/>)}
-          </div>
-          <button onClick={nextWar} style={{background:'transparent',border:`1px solid ${C.border}`,
-            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-            próximo →
-          </button>
-        </div>
-      </SpotlightCard>
-    </div>
-
-    {/* Coluna da Direita (Reflexão/Manual) */}
-    <div style={{display:'flex', flexDirection:'column', gap:14}}>
-      {/* 2. SISTEMA DOS 3 EUS */}
-      <SpotlightCard style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:20,padding:20}}>
-        <Label text="⚙️ SISTEMA DOS 3 EUS"/>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:16}}>Passado mostra o padrão. Presente escolhe. Futuro recebe.</div>
-        {[{k:'passado',l:'EU DO PASSADO',q:'Qual padrão apareceu?',p:'procrastinação...'},
-          {k:'presente',l:'EU DO PRESENTE',q:'Qual ação faço agora?',p:'resolver 5 questões...'},
-          {k:'futuro',l:'EU DO FUTURO',q:'Se repetir 30 dias, quem me torno?',p:'mais disciplinado...'}
-        ].map(eu=>
-          <div key={eu.k} style={{marginBottom:14}}>
-            <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.15em',marginBottom:4}}>{eu.l}</div>
-            <div style={{fontSize:12,color:C.textSub,marginBottom:6}}>{eu.q}</div>
-            <textarea value={e[eu.k]} onChange={ev=>setEu(eu.k,ev.target.value)} placeholder={eu.p} rows={2}
-              style={{width:'100%',background:C.bgSub,border:`1px solid ${C.border}`,borderRadius:8,
-              padding:'10px 12px',color:C.text,fontSize:13,resize:'none',outline:'none',
-              boxSizing:'border-box',fontFamily:'inherit'}}/>
-          </div>)}
-        <div style={{display:'flex',gap:10}}>
-          <div style={{flex:1}}>
-            <Btn label={state.eusSaved?'✓ SALVO':'SALVAR REFLEXÃO'} variant="secondary" full
-              disabled={!e.passado.trim()||!e.presente.trim()||!e.futuro.trim()}
-              onClick={()=>{setState(s=>({...s,eusSaved:true,flags:{...s.flags,eus:true}}));
-                toast('Reflexão salva. +1 ponto.');}}/>
-          </div>
-          <div style={{flex:1}}>
-            <Btn label="ATIVAR GUERREIRO ⚔️" full
-              disabled={!e.presente.trim()}
-              onClick={()=>{
-                if(!e.presente.trim())return;
-                if(!state.mission){
-                  toast('Defina uma missão antes de ativar o Guerreiro.');
-                  return;
-                }
-                setState(s=>({...s,action:{
-                  desc:e.presente.trim(),
-                  status:'pendente'
-                }}));
-                toast('Ação do Guerreiro atualizada.');}}/>
-          </div>
-        </div>
-      </SpotlightCard>
-
-      {/* 3. ARTIGO DO DIA */}
-      <SpotlightCard style={{background:C.bgCard,border:`1.5px solid ${C.gold}44`,borderRadius:20,padding:20}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-          <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.2em'}}>📜 ARTIGO DO DIA</div>
-          <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub}}>{artIdx+1}/{CONSTITUTION.length}</div>
-        </div>
-
-        <div style={{fontSize:10,fontFamily:'monospace',color:C.gold,letterSpacing:'0.1em',marginBottom:8}}>
-          {artig.icon} ART. {artig.n} — {artig.titulo}
-        </div>
-        <div style={{fontSize:20,fontFamily:'Georgia,serif',color:C.text,lineHeight:1.35,marginBottom:20}}>
-          {artig.principio}
-        </div>
-
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <button onClick={prevArt} style={{background:'transparent',border:`1px solid ${C.border}`,
-            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-            ←
-          </button>
-          <div style={{display:'flex',gap:4}}>
-            {CONSTITUTION.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',
-              background:i===artIdx?C.gold:C.border}}/>)}
-          </div>
-          <button onClick={nextArt} style={{background:'transparent',border:`1px solid ${C.border}`,
-            borderRadius:8,padding:'8px 16px',color:C.textSub,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-            →
-          </button>
-        </div>
-
-        <Btn label="CONFRONTAR" full onClick={()=>setShowConfrontar(true)}/>
-      </SpotlightCard>
-    </div>
-
-  </div>;
-}
-
-// ─── GRADE DE BATALHAS (COMPONENTE DE HISTÓRICO) ───
-function BattleGrid({ history, getPast30Days, getLocalDateString }) {
-  const [selectedDay, setSelectedDay] = useState(null);
-  
-  const dates = getPast30Days();
-  const calculateScore = (s) => {
-    if (!s || !s.flags) return 0;
-    const f = s.flags;
-    return (f.missao?2:0)+(f.acao?3:0)+(f.fuga?2:0)+(f.eus?1:0)+(f.naoZerou?2:0);
+  const handleSavePrinciple = (id) => {
+    if (!editTitle.trim() || !editAction.trim()) return;
+    setState(s => {
+      const current = s.customPrinciples || [];
+      const updated = current.map(p => p.id === id ? { ...p, titulo: editTitle.trim(), acao: editAction.trim() } : p);
+      return { ...s, customPrinciples: updated };
+    });
+    setEditPrincId(null);
+    triggerToast('Princípio atualizado!', 'success');
   };
 
-  const getDayColor = (score, hasData) => {
-    if (!hasData) return 'rgba(31, 41, 55, 0.4)';
-    if (score === 0) return 'rgba(31, 41, 55, 0.7)';
-    if (score <= 3) return 'rgba(239, 68, 68, 0.7)';
-    if (score <= 5) return 'rgba(245, 158, 11, 0.7)';
-    if (score <= 7) return 'rgba(148, 163, 184, 0.6)';
-    if (score <= 9) return 'rgba(34, 197, 94, 0.7)';
-    return 'rgba(201, 169, 106, 0.9)';
+  const handleEusChange = (field, val) => {
+    setState(s => {
+      const currentEus = s.eus || { passado: '', presente: '', futuro: '' };
+      return {
+        ...s,
+        eus: { ...currentEus, [field]: val },
+        eusSaved: false
+      };
+    });
   };
 
-  const getDayLabel = (score) => {
-    if (score <= 3) return 'Dia Fraco';
-    if (score <= 5) return 'Dia Mínimo';
-    if (score <= 7) return 'Dia Bom';
-    if (score <= 9) return 'Dia Forte';
-    return 'Dia Elite';
+  const handleSaveEus = () => {
+    if (!state.eus?.passado?.trim() || !state.eus?.presente?.trim() || !state.eus?.futuro?.trim()) {
+      triggerToast('Preencha os 3 campos da reflexão.', 'warning');
+      return;
+    }
+    setState(s => ({ ...s, eusSaved: true }));
+    triggerToast('Reflexão salva! +1 pt', 'success');
   };
 
-  const formatDateFriendly = (dateStr) => {
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    return `${parts[2]}/${parts[1]}`;
-  };
+  const pct = Math.min(Math.round((score / 10) * 100), 100);
 
   return (
-    <div style={{background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, marginBottom: 4}}>
-      <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,letterSpacing:'0.2em',marginBottom:12}}>📊 HISTÓRICO DE BATALHAS (30 DIAS)</div>
+    <div className="two-col-grid" style={{ padding: '20px 16px 100px' }}>
       
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 8, marginBottom: 12}}>
-        {dates.map(dateStr => {
-          const entry = history.find(h => h.date === dateStr);
-          const score = entry ? calculateScore(entry.state) : 0;
-          const hasData = !!entry;
-          const color = getDayColor(score, hasData);
-          const active = selectedDay === dateStr;
-
-          return (
-            <button
-              key={dateStr}
-              onClick={() => setSelectedDay(selectedDay === dateStr ? null : dateStr)}
-              style={{
-                width: '100%',
-                aspectRatio: '1',
-                background: color,
-                border: active ? `2.2px solid ${C.gold}` : `1px solid rgba(255,255,255,0.05)`,
-                borderRadius: 6,
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                padding: 0
-              }}
-              title={`${formatDateFriendly(dateStr)}: ${hasData ? `${score} pts (${getDayLabel(score)})` : 'Sem dados'}`}
-            />
-          );
-        })}
+      {/* SEÇÃO METAS GERAIS DO DIA */}
+      <div className="full-width-col">
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.textMuted }}>STATUS GERAL DE HOJE</span>
+              <div style={{ fontSize: 18, fontWeight: 'bold', color: C.text, marginTop: 2 }}>{dateDisplay()}</div>
+            </div>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: classObj.color, fontWeight: 'bold', border: `1px solid ${classObj.color}`, borderRadius: 4, padding: '3px 8px' }}>
+              {classObj.label}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted, marginBottom: 8 }}>
+            <span>Pontuação Combinada: <b style={{ color: C.text }}>{score}/10 pts</b></span>
+            <span>Streak: <b style={{ color: C.accent }}>{state.streak || 0} dias</b></span>
+          </div>
+          <div style={{ width: '100%', height: 6, background: '#222', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${pct}%`, background: classObj.color, height: '100%', borderRadius: 3, transition: 'width 0.3s ease' }} />
+          </div>
+        </div>
       </div>
 
-      {selectedDay && (() => {
-        const entry = history.find(h => h.date === selectedDay);
-        const score = entry ? calculateScore(entry.state) : 0;
-        const hasData = !!entry;
+      {/* COLUNA DA ESQUERDA: LISTA DE PROJETOS */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Label text="📂 PROJETOS ATIVOS" color={C.accent} />
+          <button onClick={() => setShowCreateModal(true)} style={{
+            background: 'none', border: 'none', color: C.accent, fontWeight: 'bold', fontSize: 12, cursor: 'pointer'
+          }}>➕ NOVO PROJETO</button>
+        </div>
 
-        return (
-          <div style={{background: C.bgSub, borderRadius: 10, padding: 12, border: `1px solid ${C.border}`, animation: 'fadeIn 0.2s'}}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6}}>
-              <span style={{fontFamily: 'monospace', fontSize: 11, color: C.gold}}>{formatDateFriendly(selectedDay)}</span>
-              <span style={{fontFamily: 'monospace', fontSize: 11, color: hasData ? C.text : C.textSub}}>
-                {hasData ? `${score}/10 pts · ${getDayLabel(score)}` : 'Sem registros'}
-              </span>
-            </div>
-            {hasData ? (
-              <div>
-                <div style={{fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 4}}>
-                  🎯 {entry.state.mission?.titulo || 'Nenhuma missão definida'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {(state.projects || []).map(p => {
+            const projMissions = (state.missions || []).filter(m => m.project_id === p.id);
+            const compMissions = projMissions.filter(m => m.status === 'done');
+            
+            const totalRoadmap = p.roadmap ? p.roadmap.length : 0;
+            const compRoadmap = p.roadmap ? p.roadmap.filter(r => r.status === 'completed').length : 0;
+            const roadmapPct = totalRoadmap > 0 ? Math.round((compRoadmap / totalRoadmap) * 100) : 0;
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const completedToday = projMissions.filter(m => m.status === 'done' && m.completed_at?.startsWith(todayStr)).length;
+
+            return (
+              <div key={p.id} style={{
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16,
+                position: 'relative', overflow: 'hidden'
+              }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', background: p.color || C.accent }} />
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 20 }}>{p.emoji || '🎯'}</span>
+                    <span style={{ fontSize: 15, fontWeight: 'bold', color: C.text }}>{p.name}</span>
+                  </div>
+                  <span style={{ fontSize: 10, fontFamily: 'monospace', color: p.color || C.accent, background: `${p.color || C.accent}15`, padding: '2px 6px', borderRadius: 4, fontWeight: 'bold' }}>
+                    {p.objective || 'Executar'}
+                  </span>
                 </div>
-                {entry.state.mission?.prova && (
-                  <div style={{fontSize: 11, color: C.textSub, fontStyle: 'italic'}}>
-                    Prova: {entry.state.mission.prova}
+
+                {p.description && <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, lineHeight: 1.4 }}>{p.description}</p>}
+
+                {/* Progresso do Roadmap */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.textMuted, marginBottom: 4 }}>
+                    <span>Roadmap: {compRoadmap}/{totalRoadmap} concluídos</span>
+                    <span>{roadmapPct}%</span>
                   </div>
-                )}
-                {entry.state.streak > 0 && (
-                  <div style={{fontSize: 10, fontFamily: 'monospace', color: C.gold, marginTop: 6}}>
-                    🔥 Sequência ativa: {entry.state.streak} dias
+                  <div style={{ width: '100%', height: 4, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: `${roadmapPct}%`, background: p.color || C.accent, height: '100%', borderRadius: 2 }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: C.textMuted, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                  <div>
+                    Missões: <b>{compMissions.length}</b> total | Hoje: <b style={{ color: C.text }}>{completedToday}</b>
+                  </div>
+                  <button onClick={() => setState(s => ({ ...s, activeProjectId: p.id }))} style={{
+                    background: p.color || C.accent, border: 'none', borderRadius: 6, color: C.bg,
+                    padding: '6px 12px', fontSize: 11, fontWeight: 'bold', cursor: 'pointer'
+                  }}>
+                    ABRIR →
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {(state.projects || []).length === 0 && (
+            <div style={{ textTransform: 'uppercase', textAlign: 'center', fontSize: 11, color: C.textMuted, fontFamily: 'monospace', padding: '40px 0', border: `1px dashed ${C.border}`, borderRadius: 12 }}>
+              Nenhum projeto ativo. Clique em Novo Projeto para iniciar.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* COLUNA DA DIREITA: FUNDAMENTOS / HÁBITOS GERAIS */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        
+        {/* MEUS 3 PRINCÍPIOS */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="🏛️ MEUS 3 PRINCÍPIOS" color={C.gold} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(state.customPrinciples || []).map(p => (
+              <div key={p.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 }}>
+                {editPrincId === p.id ? (
+                  <div>
+                    <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Princípio"
+                      style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', color: C.text, fontSize: 12, outline: 'none', marginBottom: 6, boxSizing: 'border-box' }} />
+                    <input value={editAction} onChange={e => setEditAction(e.target.value)} placeholder="Ação diária"
+                      style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', color: C.text, fontSize: 12, outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => handleSavePrinciple(p.id)} style={{ padding: '4px 10px', background: C.accent, border: 'none', borderRadius: 6, color: C.bg, fontSize: 11, fontWeight: 'bold', cursor: 'pointer' }}>Salvar</button>
+                      <button onClick={() => setEditPrincId(null)} style={{ padding: '4px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{p.id}. {p.titulo}</div>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>Ação: <i>{p.acao}</i></div>
+                    </div>
+                    <button onClick={() => { setEditPrincId(p.id); setEditTitle(p.titulo); setEditAction(p.acao); }}
+                      style={{ background: 'none', border: 'none', color: C.accent, fontSize: 11, cursor: 'pointer', fontFamily: 'monospace' }}>editar</button>
                   </div>
                 )}
               </div>
-            ) : (
-              <div style={{fontSize: 12, color: C.textSub, fontStyle: 'italic'}}>
-                Nenhuma atividade registrada nesta data.
-              </div>
-            )}
+            ))}
           </div>
-        );
-      })()}
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+        </div>
+
+        {/* ACORDEÃO DA CONSTITUIÇÃO */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="📜 CONSTITUIÇÃO (10 PILARES)" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {PILARES_CONSTITUICAO.map(p => {
+              const active = activePilar === p.id;
+              const checked = !!state.constitutionChecks?.[p.id];
+              return (
+                <div key={p.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, background: active ? C.bg : 'transparent', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' }}>
+                    <button onClick={() => setActivePilar(active ? null : p.id)} style={{
+                      background: 'none', border: 'none', flex: 1, textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: C.text
+                    }}>
+                      <span>{p.icon}</span>
+                      <span style={{ fontSize: 11, fontWeight: 'bold', fontFamily: 'monospace' }}>{p.pilar.toUpperCase()}</span>
+                    </button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={checked} onChange={() => handlePilarCheck(p.id)} style={{ accentColor: C.accent, cursor: 'pointer' }} />
+                      <span style={{ fontSize: 9, fontFamily: 'monospace', color: checked ? C.success : C.textMuted }}>VIVI</span>
+                    </label>
+                  </div>
+                  {active && (
+                    <div style={{ padding: '4px 12px 12px', borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, lineHeight: 1.4 }}>
+                      {p.diretriz}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* MURAL DOS 3 EUS */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="⚙️ MURAL DOS 3 EUS" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 'bold', color: C.accent, marginBottom: 4 }}>▼ EU DO PASSADO</div>
+              <textarea value={state.eus?.passado || ''} onChange={e => handleEusChange('passado', e.target.value)} placeholder="Ex: Cedi à distração do celular" rows={1}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontSize: 12, resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 'bold', color: C.accent, marginBottom: 4 }}>▼ EU DO PRESENTE</div>
+              <textarea value={state.eus?.presente || ''} onChange={e => handleEusChange('presente', e.target.value)} placeholder="Ex: Guardei o aparelho na gaveta" rows={1}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontSize: 12, resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 'bold', color: C.accent, marginBottom: 4 }}>▼ EU DO FUTURO</div>
+              <textarea value={state.eus?.futuro || ''} onChange={e => handleEusChange('futuro', e.target.value)} placeholder="Ex: Um executor extremamente focado" rows={1}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontSize: 12, resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            </div>
+            <Btn label={state.eusSaved ? "✓ REFLEXÃO SALVA" : "SALVAR REFLEXÃO"} variant={state.eusSaved ? "secondary" : "primary"} onClick={handleSaveEus} full disabled={state.eusSaved} />
+          </div>
+        </div>
+
+      </div>
+
+      {/* MODAL CRIAR PROJETO */}
+      {showCreateModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 450, padding: 20
+        }} onClick={() => setShowCreateModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: C.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 440,
+            border: `1.5px solid ${C.border}`, boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}>
+            <Label text="➕ NOVO PROJETO" color={C.accent} />
+            
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>NOME DO PROJETO</div>
+            <input value={projName} onChange={e => setProjName(e.target.value)} placeholder="Ex: OAB 2026, Academia..."
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>DESCRIÇÃO (OPCIONAL)</div>
+            <textarea value={projDesc} onChange={e => setProjDesc(e.target.value)} placeholder="Foco ou objetivo macro..." rows={2}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 14, resize: 'none', fontFamily: 'inherit' }} />
+
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 8 }}>EMOJI / ÍCONE</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+              {EMOJIS.map(em => (
+                <button key={em} onClick={() => setProjEmoji(em)} style={{
+                  padding: 8, background: projEmoji === em ? `${C.accent}15` : 'transparent',
+                  border: `1.2px solid ${projEmoji === em ? C.accent : C.border}`, borderRadius: 8, fontSize: 18, cursor: 'pointer'
+                }}>{em}</button>
+              ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>OBJETIVO</div>
+                <select value={projObj} onChange={e => setProjObj(e.target.value)} style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, color: C.text, fontSize: 12, outline: 'none' }}>
+                  <option value="Aprender">📚 Aprender</option>
+                  <option value="Hábito">🔄 Hábito</option>
+                  <option value="Completar">🎯 Completar</option>
+                  <option value="Trabalho">💼 Trabalho</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>PRAZO</div>
+                <select value={projTarget} onChange={e => setProjTarget(e.target.value)} style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, color: C.text, fontSize: 12, outline: 'none' }}>
+                  <option value="30">30 Dias</option>
+                  <option value="60">60 Dias</option>
+                  <option value="90">90 Dias</option>
+                  <option value="ongoing">Contínuo</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 8 }}>COR TEMÁTICA</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+              {THEME_COLORS.map(col => (
+                <button key={col.hex} onClick={() => setProjColor(col.hex)} style={{
+                  width: 26, height: 26, borderRadius: '50%', background: col.hex, cursor: 'pointer',
+                  border: `2px solid ${projColor === col.hex ? '#FFF' : 'transparent'}`
+                }} title={col.name} />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Btn label="CANCELAR" variant="secondary" onClick={() => setShowCreateModal(false)} full />
+              <Btn label="CRIAR" variant="primary" onClick={handleCreateProject} full />
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
-// ─── ABA EVOLUÇÃO ───
-function TabEvolucao({state,setState,toast,history,getPast30Days,getLocalDateString}){
-  const [panelOpen,setPanelOpen]=useState(false);
-  const [activeArea,setActiveArea]=useState(null);
+// ─── ABA 1: HOJE (EXECUÇÃO) ───
+function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, setTimeLeft, timerRunning, setTimerRunning, formatTime }) {
+  const [showModal, setShowModal] = useState(false);
+  const [mTitulo, setMTitulo] = useState('');
+  const [mProva, setMProva] = useState('');
+  const [mArea, setMArea] = useState('estudo');
+  
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [travarMicro, setTravarMicro] = useState(false);
+  const [microText, setMicroText] = useState('');
+  const [customMin, setCustomMin] = useState('25');
 
-  const c=state.conversion;
-  const pct=c.consumidos>0?Math.round((c.aplicados/c.consumidos)*100):0;
-  const hasData=c.consumidos>0;
-  const blocked=hasData&&pct<40;
-  const convColor=pct>=70?C.green:pct>=40?C.yellow:C.red;
-  const convStatus=pct>=70?'🟢 ALTA':pct>=40?'🟡 MODERADA':'🔴 BAIXA';
+  const pColor = activeProject.color || C.accent;
+  const missions = (state.missions || []).filter(m => m.project_id === activeProject.id);
+  const activeMission = missions.find(m => m.status !== 'done');
+  const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  const completedMissions = missions.filter(m => m.status === 'done' && m.completed_at?.startsWith(todayStr));
 
-  const p=state.panel;
-  const toggleArea=k=>setActiveArea(a=>a===k?null:k);
-  const lvIcon=l=>l===3?'🟢':l===2?'🟡':'🔴';
-  const lvLabel=l=>l===3?'Bem':l===2?'Atenção':'Crítico';
-  const lvColor=l=>l===3?C.green:l===2?C.yellow:C.red;
+  const FUGAS = [
+    { id: 'infinito', label: 'Planejamento Infinito', acao: 'A clareza vem da prática. Execute 5 minutos agora.' },
+    { id: 'perfeccionismo', label: 'Perfeccionismo', acao: 'O feito é melhor que o perfeito. Conclua uma versão simplificada imediatamente.' },
+    { id: 'distracao', label: 'Distração / Rede Social', acao: 'Feche todas as abas extras e foque no próximo passo simples.' }
+  ];
 
-  // resumo do painel
-  const alertCount=PANEL_AREAS.filter(a=>p[a.key]<3).length;
-  const critCount=PANEL_AREAS.filter(a=>p[a.key]===1).length;
-  const panelSummary=alertCount===0
-    ?'Todas as áreas em equilíbrio.'
-    :`${alertCount}/5 ${alertCount===1?'área':'áreas'} pedindo atenção${critCount>0?` · ${critCount} crítica${critCount>1?'s':''}`:''}`;
-  const panelSummaryColor=critCount>0?C.red:alertCount>0?C.yellow:C.green;
+  const handleAjudaAction = (type) => {
+    setHelpOpen(false);
+    if (type === 'respirar') {
+      setTimerRunning(false);
+      setState(s => ({ ...s, opState: 'respirar_90' }));
+    } else if (type === 'micro') {
+      setTravarMicro(true);
+    } else if (type === 'minimo') {
+      setState(s => ({
+        ...s,
+        modoMinimo: true,
+        flags: { ...s.flags, naoZerou: true },
+        streak: s.flags.naoZerou ? s.streak : s.streak + 1
+      }));
+      triggerToast('Modo Mínimo Ativado! +2 pts', 'success');
+    }
+  };
 
-  // correção prioritária — crítico → conversão → atenção
-  const order=['saude','familia','fe','estudo','empresa'];
-  let corr=null;
-  for(const k of order)if(p[k]===1){const a=PANEL_AREAS.find(x=>x.key===k);corr={area:a.label,icon:a.icon,urgencia:'CRÍTICO',acao:a.micro,cor:C.red};break;}
-  if(!corr&&blocked)corr={area:'Conversão',icon:'📈',urgencia:'BLOQUEADO',acao:'Aplicar imediatamente um conteúdo aprendido.',cor:C.red};
-  if(!corr)for(const k of order)if(p[k]===2){const a=PANEL_AREAS.find(x=>x.key===k);corr={area:a.label,icon:a.icon,urgencia:'ATENÇÃO',acao:a.micro,cor:C.yellow};break;}
+  const handleFugaAction = (fugaId) => {
+    setTimerRunning(false);
+    setState(s => {
+      const currentFugas = s.fixedEscapes || [];
+      if (currentFugas.includes(fugaId)) return s;
+      return {
+        ...s,
+        fixedEscapes: [...currentFugas, fugaId],
+        flags: { ...s.flags, fuga: true }
+      };
+    });
+    setState(s => ({ ...s, opState: 'fuga_90', fugaTipo: fugaId }));
+  };
 
-  return <div className="two-col-grid" style={{padding:'20px 16px 100px'}}>
+  const handleMicroActionSubmit = () => {
+    if (!microText.trim()) return;
+    setState(s => {
+      const current = s.missions || [];
+      const updated = current.map(m => m.project_id === activeProject.id && m.status !== 'done' ? { ...m, prova: microText.trim() } : m);
+      return { ...s, missions: updated };
+    });
+    setMicroText('');
+    setTravarMicro(false);
+    triggerToast('Micro-ação adicionada!', 'success');
+  };
 
-    {/* Grade de Batalhas (Largura total no desktop) */}
-    <div className="full-width-col">
-      <BattleGrid history={history} getPast30Days={getPast30Days} getLocalDateString={getLocalDateString} />
-    </div>
+  const toggleTimer = () => {
+    if (!activeMission) {
+      triggerToast('Nenhuma missão definida para focar.', 'error');
+      return;
+    }
+    setTimerRunning(!timerRunning);
+  };
 
-    {/* Coluna da Esquerda */}
-    <div style={{display:'flex', flexDirection:'column', gap:12}}>
-      {/* 1. CORREÇÃO PRIORITÁRIA */}
-      {corr?
-        <SpotlightCard style={{background:state.corrDone
-            ?'rgba(34,197,94,0.06)'
-            :`linear-gradient(135deg,${corr.cor}18,${corr.cor}08)`,
-          border:`1.5px solid ${state.corrDone?C.green+'44':corr.cor+'55'}`,
-          borderRadius:20,padding:20}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-            <Label text="🎯 CORREÇÃO PRIORITÁRIA" color={state.corrDone?C.green:corr.cor}/>
-            {!state.corrDone&&<div style={{fontSize:9,fontFamily:'monospace',color:corr.cor,
-              background:`${corr.cor}22`,border:`1px solid ${corr.cor}44`,
-              borderRadius:6,padding:'3px 8px',letterSpacing:'0.1em'}}>{corr.urgencia}</div>}
-          </div>
-          {state.corrDone
-            ?<>
-              <div style={{fontSize:15,fontWeight:700,color:C.green,marginBottom:6}}>✓ Correção realizada.</div>
-              <div style={{fontSize:13,color:C.textSub}}>Volte à Aba Hoje e execute.</div>
-            </>
-            :<>
-              <div style={{fontSize:22,fontWeight:700,color:C.text,lineHeight:1.2,marginBottom:4}}>
-                {corr.icon} {corr.area}
-              </div>
-              <div style={{fontSize:14,color:C.text,lineHeight:1.5,marginBottom:20}}>
-                {corr.acao}
-              </div>
-              <Btn label="CORRIGIR AGORA" variant="critical" full
-                onClick={()=>{setState(s=>({...s,corrDone:true}));toast('Correção realizada.');}}/>
-            </>}
-        </SpotlightCard>
-        :<SpotlightCard style={{background:'rgba(34,197,94,0.06)',border:`1.5px solid ${C.green}44`,borderRadius:20,padding:20}}>
-          <Label text="🎯 CORREÇÃO PRIORITÁRIA" color={C.green}/>
-          <div style={{fontSize:15,fontWeight:700,color:C.green,marginBottom:4}}>✓ Tudo em ordem hoje.</div>
-          <div style={{fontSize:13,color:C.textSub}}>Nenhuma área crítica. Mantenha o ritmo.</div>
-        </SpotlightCard>}
+  const setPreset = (mins) => {
+    setTimeLeft(mins * 60);
+    setTimerRunning(false);
+    triggerToast(`Timer configurado para ${mins} min.`, 'info');
+  };
 
-      {/* 2. ÍNDICE DE CONVERSÃO */}
-      <SpotlightCard style={{background:C.bgCard,border:`1px solid ${hasData?convColor+'44':C.border}`,borderRadius:16,padding:18}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <Label text="📈 CONVERSÃO"/>
-          <div style={{fontSize:11,fontFamily:'monospace',color:convColor,fontWeight:700}}>
-            {hasData?`${pct}% · ${convStatus}`:'SEM DADOS'}
-          </div>
-        </div>
+  const setCustomTime = () => {
+    const m = parseInt(customMin);
+    if (isNaN(m) || m <= 0) return;
+    setTimeLeft(m * 60);
+    setTimerRunning(false);
+    triggerToast(`Timer configurado para ${m} min.`, 'info');
+  };
 
-        {!hasData
-          ?<div style={{fontSize:13,color:C.textSub,marginBottom:14}}>
-              0% — Nenhuma execução registrada hoje.
-            </div>
-          :<div style={{display:'flex',gap:16,fontSize:12,color:C.textSub,marginBottom:12}}>
-              <span>Consumidos: <b style={{color:C.text}}>{c.consumidos}</b></span>
-              <span>Aplicados: <b style={{color:convColor}}>{c.aplicados}</b></span>
-            </div>}
+  const handleCompleteMission = () => {
+    if (!activeMission) return;
+    setTimerRunning(false);
+    setTimeLeft(activeProject.defaultTimer || 1500);
+    setState(s => {
+      const current = s.missions || [];
+      const updated = current.map(m => (m.project_id === activeProject.id && m.status !== 'done') ? { ...m, status: 'done', completed_at: new Date().toISOString() } : m);
+      
+      // Update statistics of corresponding roadmap item if any
+      const matchingRoadmapIndex = activeProject.roadmap ? activeProject.roadmap.findIndex(item => item.title.toLowerCase() === activeMission.titulo.toLowerCase() && item.status !== 'completed') : -1;
+      
+      let updatedProjects = s.projects || [];
+      if (matchingRoadmapIndex !== -1) {
+        updatedProjects = updatedProjects.map(proj => {
+          if (proj.id === activeProject.id) {
+            const updatedRoadmap = proj.roadmap.map((item, idx) => idx === matchingRoadmapIndex ? { ...item, status: 'completed', progress: 100 } : item);
+            return { ...proj, roadmap: updatedRoadmap };
+          }
+          return proj;
+        });
+      }
 
-        {blocked&&<div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.25)',
-          borderRadius:8,padding:'8px 12px',marginBottom:12}}>
-          <div style={{fontSize:11,color:C.red,fontFamily:'monospace',fontWeight:700}}>
-            ⛔ BLOQUEIO — Aplique antes de consumir novo conteúdo.
-          </div>
-        </div>}
+      return {
+        ...s,
+        missions: updated,
+        projects: updatedProjects,
+        flags: { ...s.flags, acao: true, naoZerou: true },
+        streak: s.flags.naoZerou ? s.streak : s.streak + 1
+      };
+    });
+    triggerToast('Missão concluída! +3 pts', 'success');
+  };
 
-        <div style={{display:'flex',gap:10}}>
-          <button
-            disabled={c.consumidos===0}
-            onClick={()=>{
-              if(c.consumidos===0){toast('Registre um conteúdo antes de aplicar.');return;}
-              setState(s=>({...s,corrDone:false,conversion:{...s.conversion,
-                aplicados:Math.min(s.conversion.aplicados+1,s.conversion.consumidos)}}));}}
-            style={{flex:2,padding:'11px 0',background:c.consumidos===0?C.bgSub:C.green,border:'none',
-              borderRadius:12,color:c.consumidos===0?C.textSub:'#0B0B0F',fontFamily:'monospace',fontWeight:700,
-              fontSize:12,cursor:c.consumidos===0?'default':'pointer',letterSpacing:'0.04em',
-              opacity:c.consumidos===0?0.4:1}}>
-            + Aplicação
-          </button>
-          <button
-            onClick={()=>setState(s=>({...s,corrDone:false,conversion:{...s.conversion,consumidos:s.conversion.consumidos+1}}))}
-            style={{flex:1,padding:'11px 0',background:'transparent',
-              border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,
-              fontFamily:'monospace',fontSize:12,cursor:'pointer'}}>
-            + Conteúdo
-          </button>
-        </div>
-      </SpotlightCard>
-    </div>
+  const confirmMission = () => {
+    if (!mTitulo.trim() || !mProva.trim()) return;
+    const areaObj = LIFE_AREAS.find(a => a.key === mArea);
+    const newMission = {
+      titulo: mTitulo.trim(),
+      prova: mProva.trim(),
+      area: mArea,
+      status: 'pendente',
+      project_id: activeProject.id,
+      created_at: new Date().toISOString()
+    };
+    setState(s => {
+      const current = s.missions || [];
+      return {
+        ...s,
+        missions: [...current, newMission],
+        flags: { ...s.flags, missao: true }
+      };
+    });
+    setShowModal(false); setMTitulo(''); setMProva(''); setMArea('estudo');
+    setTimeLeft(activeProject.defaultTimer || 1500);
+    triggerToast('Missão criada! +2 pts', 'success');
+  };
 
-    {/* Coluna da Direita */}
-    <div style={{display:'flex', flexDirection:'column', gap:12}}>
-      {/* 3. PAINEL DA VIDA */}
-      <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,overflow:'hidden'}}>
-        <button onClick={()=>setPanelOpen(o=>!o)} style={{width:'100%',padding:'16px 18px',
-          display:'flex',justifyContent:'space-between',alignItems:'center',
-          background:'transparent',border:'none',cursor:'pointer'}}>
-          <div style={{textAlign:'left'}}>
-            <div style={{fontSize:10,fontFamily:'monospace',color:C.textSub,
-              letterSpacing:'0.2em',marginBottom:3}}>⚖️ PAINEL DA VIDA</div>
-            <div style={{fontSize:13,color:panelSummaryColor,fontWeight:600}}>{panelSummary}</div>
-          </div>
-          <span style={{fontSize:12,fontFamily:'monospace',color:C.gold,marginLeft:12}}>
-            {panelOpen?'▲':'▼'}
-          </span>
-        </button>
+  return (
+    <div className="two-col-grid" style={{ paddingBottom: 100 }}>
 
-        {panelOpen&&<div style={{borderTop:`1px solid ${C.border}`,padding:'4px 0 8px'}}>
-          {PANEL_AREAS.map(a=>{
-            const lv=p[a.key];
-            const isActive=activeArea===a.key;
-            return <div key={a.key}>
-              <button onClick={()=>toggleArea(a.key)} style={{width:'100%',padding:'12px 18px',
-                display:'flex',justifyContent:'space-between',alignItems:'center',
-                background:isActive?`${lvColor(lv)}0D`:'transparent',
-                border:'none',cursor:'pointer'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontSize:15}}>{a.icon}</span>
-                  <span style={{fontSize:13,color:C.text}}>{a.label}</span>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{fontSize:13}}>{lvIcon(lv)}</span>
-                  <span style={{fontSize:10,fontFamily:'monospace',color:lvColor(lv),
-                    letterSpacing:'0.04em'}}>{lvLabel(lv)}</span>
-                  <span style={{fontSize:10,color:C.textSub,marginLeft:4}}>{isActive?'▲':'▼'}</span>
-                </div>
-              </button>
-              {isActive&&<div style={{padding:'4px 18px 14px',display:'flex',gap:8}}>
-                {[1,2,3].map(lvl=>(
-                  <button key={lvl} onClick={()=>{
-                      setState(s=>({...s,corrDone:false,panel:{...s.panel,[a.key]:lvl}}));
-                      setActiveArea(null);
-                    }}
-                    style={{flex:1,padding:'8px 0',borderRadius:10,
-                      border:`1px solid ${lv===lvl?lvColor(lvl)+'88':C.border}`,
-                      background:lv===lvl?`${lvColor(lvl)}18`:'transparent',
-                      color:lv===lvl?lvColor(lvl):C.textSub,
-                      fontFamily:'monospace',fontSize:11,cursor:'pointer',fontWeight:lv===lvl?700:400}}>
-                    {lvl===3?'🟢 Bem':lvl===2?'🟡 Atenção':'🔴 Crítico'}
+      {/* DEFINIR MISSÃO MODAL */}
+      {showModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex',
+          alignItems: 'flex-end', justifyContent: 'center', zIndex: 400
+        }} onClick={() => setShowModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: C.surface, borderRadius: '16px 16px 0 0',
+            padding: '24px 20px 40px', width: '100%', maxWidth: 480, border: `1px solid ${C.border}`
+          }}>
+            <div style={{ width: 40, height: 4, background: C.border, borderRadius: 2, margin: '0 auto 20px' }} />
+            <div style={{ fontSize: 16, fontWeight: 700, color: pColor, marginBottom: 20 }}>DEFINIR MISSÃO NO PROJETO</div>
+            
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 6 }}>O QUE PRECISO FAZER?</div>
+            <input value={mTitulo} onChange={e => setMTitulo(e.target.value)} placeholder="Ex: Revisar Artigo Constitucional"
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+            
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 6 }}>COMO SABEREI QUE FOI FEITO? (PROVA)</div>
+            <input value={mProva} onChange={e => setMProva(e.target.value)} placeholder="Ex: Resolver 15 questões e resumo feito"
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 8 }}>ÁREA DA VIDA</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
+              {LIFE_AREAS.map(a => {
+                const selected = mArea === a.key;
+                return (
+                  <button key={a.key} onClick={() => setMArea(a.key)} style={{
+                    padding: '6px 12px', borderRadius: 6, fontSize: 11, fontFamily: 'inherit', cursor: 'pointer',
+                    border: `1px solid ${selected ? pColor : C.border}`,
+                    background: selected ? `${pColor}15` : 'transparent',
+                    color: selected ? pColor : C.text, transition: 'all 0.15s'
+                  }}>
+                    {a.icon} {a.label}
                   </button>
-                ))}
-              </div>}
-            </div>;
-          })}
-        </div>}
-      </div>
-    </div>
+                );
+              })}
+            </div>
 
-  </div>;
+            <Btn label="CONFIRMAR MISSÃO ✓" full disabled={!mTitulo.trim() || !mProva.trim()} onClick={confirmMission} activeColor={pColor} />
+          </div>
+        </div>
+      )}
+
+      {/* INDICADORES DE PROGRESSO DIÁRIO DO PROJETO */}
+      <div className="full-width-col" style={{ padding: '0 16px' }}>
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px',
+          display: 'flex', justifyContent: 'space-around', alignItems: 'center'
+        }}>
+          {[
+            { label: 'MISSÃO', active: (state.missions || []).some(m => m.project_id === activeProject.id && m.created_at?.startsWith(todayStr)), char: '🎯' },
+            { label: 'AÇÃO', active: (state.missions || []).some(m => m.project_id === activeProject.id && m.status === 'done' && m.completed_at?.startsWith(todayStr)), char: '⚔️' },
+            { label: 'FUGA', active: state.fixedEscapes && state.fixedEscapes.length > 0, char: '🔍' },
+            { label: 'REFLEXÃO', active: state.eusSaved, char: '📜' }
+          ].map(item => (
+            <div key={item.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div
+                title={item.label}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: item.active ? 'rgba(16,185,129,0.15)' : '#1F2937',
+                  border: `1.5px solid ${item.active ? '#10B981' : '#374151'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 14,
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                {item.char}
+              </div>
+              <span style={{ fontSize: 9, fontFamily: 'monospace', color: item.active ? '#10B981' : C.textMuted, fontWeight: 'bold' }}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* COLUNA ESQUERDA: TIMER E MISSÃO ATIVA */}
+      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        
+        {/* TIMER DE EXECUÇÃO */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Label text="⏱️ CRONÔMETRO DE FOCO" color={pColor} />
+            
+            {/* Quick Switch Dropdown */}
+            <select value={activeProject.id} onChange={e => setState(s => ({ ...s, activeProjectId: e.target.value }))} style={{
+              background: C.bg, border: `1.2px solid ${C.border}`, color: C.text, fontSize: 11, padding: '4px 8px', borderRadius: 6, outline: 'none'
+            }}>
+              {(state.projects || []).map(p => (
+                <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {activeMission ? (
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 'bold', color: C.text, lineHeight: 1.3, marginBottom: 6 }}>{activeMission.titulo}</div>
+              
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {(() => {
+                  const a = LIFE_AREAS.find(x => x.key === activeMission.area || (activeMission.area === 'empresa' && x.key === 'carreira'));
+                  if (!a) return null;
+                  return (
+                    <span style={{
+                      fontSize: 9, fontFamily: 'monospace', color: pColor, fontWeight: 'bold',
+                      background: `${pColor}15`, border: `1.2px solid ${pColor}33`, borderRadius: 6,
+                      padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4
+                    }}>
+                      {a.icon} {a.label.toUpperCase()}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20 }}>
+                Prova: <i>{activeMission.prova}</i>
+              </div>
+
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <div style={{ fontSize: 56, fontFamily: 'JetBrains Mono, monospace', fontWeight: 'bold', color: timerRunning ? pColor : C.text, letterSpacing: '0.04em', margin: '10px 0' }}>
+                  {formatTime(timeLeft)}
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                  <Btn label={timerRunning ? "PAUSAR ⏱️" : "INICIAR ⚡"} variant={timerRunning ? "secondary" : "primary"} onClick={toggleTimer} activeColor={pColor} />
+                  <Btn label="CONCLUÍDO" variant="success" onClick={handleCompleteMission} activeColor={pColor} />
+                </div>
+              </div>
+
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+                <button onClick={() => setHelpOpen(!helpOpen)} style={{
+                  width: '100%', background: 'transparent', border: 'none', color: pColor,
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                  <span>Dificuldades de Foco?</span>
+                  <span>{helpOpen ? '▲ ANULAR BLOQUEIO' : '▼ AJUDA'}</span>
+                </button>
+
+                {helpOpen && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <button onClick={() => handleAjudaAction('respirar')} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, color: C.text, cursor: 'pointer', textAlign: 'center' }}>
+                        <div style={{ fontSize: 14, marginBottom: 4 }}>🫁</div>
+                        <div style={{ fontSize: 11, fontWeight: 'bold', color: pColor }}>RESPIRAR 90s</div>
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>Mente em foco</div>
+                      </button>
+                      <button onClick={() => handleAjudaAction('micro')} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, color: C.text, cursor: 'pointer', textAlign: 'center' }}>
+                        <div style={{ fontSize: 14, marginBottom: 4 }}>⚡</div>
+                        <div style={{ fontSize: 11, fontWeight: 'bold', color: pColor }}>MICRO-AÇÃO</div>
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>Divida a tarefa</div>
+                      </button>
+                    </div>
+                    <button onClick={() => handleAjudaAction('minimo')} style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', color: C.text, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontSize: 11, fontWeight: 'bold', color: pColor }}>📉 MODO MÍNIMO</div>
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>Garanta o essencial nos dias de cansaço extremo</div>
+                      </div>
+                      <span style={{ fontSize: 10, color: pColor, fontFamily: 'monospace' }}>ATIVAR →</span>
+                    </button>
+                  </div>
+                )}
+
+                {travarMicro && (
+                  <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12, marginTop: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 'bold', color: pColor, marginBottom: 4 }}>PASSO DE 5 MINUTOS</div>
+                    <input value={microText} onChange={e => setMicroText(e.target.value)} placeholder="Ex: Abrir a pasta com os materiais agora"
+                      style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontSize: 12, outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={handleMicroActionSubmit} style={{ padding: '6px 12px', background: pColor, color: C.bg, border: 'none', borderRadius: 6, fontWeight: 'bold', fontSize: 11, cursor: 'pointer' }}>Injetar Prova</button>
+                      <button onClick={() => setTravarMicro(false)} style={{ padding: '6px 12px', background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <p style={{ color: C.textMuted, fontSize: 13, marginBottom: 16 }}>Nenhuma missão ativa neste projeto.</p>
+              <Btn label="➕ DEFINIR MISSÃO" onClick={() => setShowModal(true)} activeColor={pColor} />
+              
+              {/* Presets & Custom time configuration */}
+              <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 24, paddingTop: 16 }}>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 10 }}>AJUSTAR TEMPO DO TIMER</div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                  {[15, 25, 45, 60].map(mins => (
+                    <button key={mins} onClick={() => setPreset(mins)} style={{
+                      padding: '6px 12px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.bg, color: C.text,
+                      fontSize: 11, cursor: 'pointer', fontFamily: 'monospace'
+                    }}>{mins} Min</button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
+                  <input type="number" value={customMin} onChange={e => setCustomMin(e.target.value)}
+                    style={{ width: 60, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', color: C.text, textAlign: 'center', fontSize: 12 }} />
+                  <span style={{ fontSize: 11, color: C.textMuted }}>Minutos</span>
+                  <button onClick={setCustomTime} style={{
+                    padding: '4px 10px', background: pColor, color: C.bg, border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 'bold', cursor: 'pointer'
+                  }}>Aplicar</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* COLUNA DIREITA: DETECTOR DE DESVIOS E HISTÓRICO LOCAL */}
+      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        
+        {/* DETECTOR DE DESVIOS */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="🔍 ANTÍDOTO COMPORTAMENTAL" color={pColor} />
+          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>Se notar desvio, clique no antídoto abaixo:</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {FUGAS.map(f => {
+              const corrigido = state.fixedEscapes?.includes(f.id);
+              return (
+                <button key={f.id} onClick={() => !corrigido && handleFugaAction(f.id)} disabled={corrigido}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8, background: corrigido ? `${C.success}08` : 'transparent',
+                    border: `1px solid ${corrigido ? C.success + '4D' : C.border}`, color: corrigido ? C.success : C.textMuted,
+                    fontFamily: 'monospace', fontSize: 10, cursor: corrigido ? 'default' : 'pointer', display: 'flex',
+                    justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.15s'
+                  }}>
+                  <span>{f.label}</span>
+                  <span style={{ color: corrigido ? C.success : pColor }}>{corrigido ? 'CORRIGIDO (+2)' : 'APLICAR'}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* HISTÓRICO DIÁRIO DO PROJETO */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="HISTÓRICO DE HOJE DO PROJETO" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
+            {completedMissions.map((m, idx) => {
+              const a = LIFE_AREAS.find(x => x.key === m.area || (m.area === 'empresa' && x.key === 'carreira'));
+              return (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: `${C.success}0a`, border: `1px solid ${C.success}22`, borderRadius: 8, opacity: 0.7 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 'bold', color: C.text, textDecoration: 'line-through' }}>{m.titulo}</span>
+                      {a && (
+                        <span style={{
+                          fontSize: 8, fontFamily: 'monospace', color: C.success,
+                          background: `${C.success}15`, borderRadius: 4, padding: '1px 4px'
+                        }}>
+                          {a.icon} {a.label}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Concluída | Prova: {m.prova}</div>
+                  </div>
+                  <div style={{ color: C.success, fontSize: 11, fontWeight: 'bold' }}>✓ +3 pts</div>
+                </div>
+              );
+            })}
+            
+            {activeMission && (() => {
+              const a = LIFE_AREAS.find(x => x.key === activeMission.area || (activeMission.area === 'empresa' && x.key === 'carreira'));
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: `${pColor}0a`, border: `1px solid ${pColor}33`, borderRadius: 8 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 'bold', color: C.text }}>{activeMission.titulo}</span>
+                      {a && (
+                        <span style={{
+                          fontSize: 8, fontFamily: 'monospace', color: pColor,
+                          background: `${pColor}15`, borderRadius: 4, padding: '1px 4px'
+                        }}>
+                          {a.icon} {a.label}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Em andamento...</div>
+                  </div>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: pColor, animation: 'blinking 1.5s infinite' }} />
+                </div>
+              );
+            })()}
+
+            {missions.length === 0 && (
+              <div style={{ textTransform: 'uppercase', textAlign: 'center', fontSize: 10, fontFamily: 'monospace', color: C.textMuted, padding: '12px 0' }}>
+                Nenhuma meta cadastrada hoje.
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+// ─── ABA 2: ROADMAP ───
+function ProjectRoadmap({ state, setState, activeProject, triggerToast }) {
+  const [showEditor, setShowEditor] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  
+  // Form fields
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [status, setStatus] = useState('todo');
+  const [progress, setProgress] = useState(0);
+  const [estDays, setEstDays] = useState(2);
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState([]);
+
+  const pColor = activeProject.color || C.accent;
+  const roadmapItems = activeProject.roadmap || [];
+
+  const handleOpenNew = () => {
+    setEditItem(null);
+    setTitle('');
+    setDesc('');
+    setStatus('todo');
+    setProgress(0);
+    setEstDays(2);
+    setTags([]);
+    setShowEditor(true);
+  };
+
+  const handleOpenEdit = (item) => {
+    setEditItem(item);
+    setTitle(item.title);
+    setDesc(item.description || '');
+    setStatus(item.status);
+    setProgress(item.progress || 0);
+    setEstDays(item.estimated_days || 2);
+    setTags(item.tags || []);
+    setShowEditor(true);
+  };
+
+  const handleAddTag = () => {
+    if (!tagInput.trim() || tags.includes(tagInput.trim())) return;
+    setTags([...tags, tagInput.trim()]);
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tag) => {
+    setTags(tags.filter(t => t !== tag));
+  };
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    setState(s => {
+      const projects = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          const currentRoadmap = p.roadmap || [];
+          let updatedRoadmap;
+          if (editItem) {
+            // Edit mode
+            updatedRoadmap = currentRoadmap.map(item => item.id === editItem.id ? {
+              ...item, title: title.trim(), description: desc.trim(), status,
+              progress: status === 'completed' ? 100 : progress, estimated_days: parseInt(estDays) || 2, tags
+            } : item);
+          } else {
+            // New mode
+            const newItem = {
+              id: 'road-' + Date.now(),
+              title: title.trim(),
+              description: desc.trim(),
+              status,
+              progress: status === 'completed' ? 100 : progress,
+              estimated_days: parseInt(estDays) || 2,
+              tags
+            };
+            updatedRoadmap = [...currentRoadmap, newItem];
+          }
+          return { ...p, roadmap: updatedRoadmap };
+        }
+        return p;
+      });
+      return { ...s, projects };
+    });
+    setShowEditor(false);
+    triggerToast('Item do Roadmap salvo!', 'success');
+  };
+
+  const handleDelete = () => {
+    if (!editItem) return;
+    setState(s => {
+      const projects = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          const updatedRoadmap = (p.roadmap || []).filter(item => item.id !== editItem.id);
+          return { ...p, roadmap: updatedRoadmap };
+        }
+        return p;
+      });
+      return { ...s, projects };
+    });
+    setShowEditor(false);
+    triggerToast('Item do Roadmap deletado.', 'warning');
+  };
+
+  const moveStatus = (item, newStatus) => {
+    setState(s => {
+      const projects = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          const updatedRoadmap = (p.roadmap || []).map(r => r.id === item.id ? {
+            ...r, status: newStatus, progress: newStatus === 'completed' ? 100 : r.progress
+          } : r);
+          return { ...p, roadmap: updatedRoadmap };
+        }
+        return p;
+      });
+      return { ...s, projects };
+    });
+    triggerToast('Item atualizado!', 'success');
+  };
+
+  const todoItems = roadmapItems.filter(r => r.status === 'todo');
+  const inProgressItems = roadmapItems.filter(r => r.status === 'in_progress');
+  const completedItems = roadmapItems.filter(r => r.status === 'completed');
+
+  return (
+    <div style={{ padding: '0 16px 100px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Label text="📍 ROADMAP DO PROJETO" color={pColor} />
+        <Btn label="➕ ADICIONAR ITEM" variant="primary" small onClick={handleOpenNew} activeColor={pColor} />
+      </div>
+
+      {/* KANBAN LAYOUT */}
+      <div className="roadmap-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+        
+        {/* TO DO COLUMN */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, minHeight: 260 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 'bold', color: C.critical, fontFamily: 'monospace' }}>🔴 TO DO ({todoItems.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {todoItems.map(item => (
+              <div key={item.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div onClick={() => handleOpenEdit(item)} style={{ fontSize: 13, fontWeight: 'bold', color: C.text, cursor: 'pointer' }}>{item.title}</div>
+                  <button onClick={() => moveStatus(item, 'in_progress')} style={{ background: 'none', border: 'none', color: pColor, fontSize: 10, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}>FOCAR →</button>
+                </div>
+                {item.description && <p style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{item.description}</p>}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                  {item.tags?.map(t => <span key={t} style={{ fontSize: 9, background: '#222', color: C.textMuted, padding: '1px 5px', borderRadius: 4 }}>#{t}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* IN PROGRESS COLUMN */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, minHeight: 260 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 'bold', color: C.warning, fontFamily: 'monospace' }}>🟡 EM PROGRESSO ({inProgressItems.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {inProgressItems.map(item => (
+              <div key={item.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div onClick={() => handleOpenEdit(item)} style={{ fontSize: 13, fontWeight: 'bold', color: C.text, cursor: 'pointer' }}>{item.title}</div>
+                  <button onClick={() => moveStatus(item, 'completed')} style={{ background: 'none', border: 'none', color: C.success, fontSize: 10, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}>PRONTO ✓</button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.textMuted, marginTop: 6, marginBottom: 2 }}>
+                  <span>Progresso: {item.progress}%</span>
+                  <span>Est: {item.estimated_days}d</span>
+                </div>
+                <div style={{ width: '100%', height: 4, background: '#222', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
+                  <div style={{ width: `${item.progress}%`, background: pColor, height: '100%' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {item.tags?.map(t => <span key={t} style={{ fontSize: 9, background: '#222', color: C.textMuted, padding: '1px 5px', borderRadius: 4 }}>#{t}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* COMPLETED COLUMN */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, minHeight: 260 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 'bold', color: C.success, fontFamily: 'monospace' }}>🟢 CONCLUÍDO ({completedItems.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {completedItems.map(item => (
+              <div key={item.id} style={{ background: `${C.success}05`, border: `1px solid ${C.success}33`, borderRadius: 8, padding: 12, opacity: 0.8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div onClick={() => handleOpenEdit(item)} style={{ fontSize: 13, fontWeight: 'bold', color: C.text, textDecoration: 'line-through', cursor: 'pointer' }}>{item.title}</div>
+                  <button onClick={() => moveStatus(item, 'todo')} style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 10, cursor: 'pointer', fontFamily: 'monospace' }}>REFAZER</button>
+                </div>
+                {item.description && <p style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{item.description}</p>}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                  {item.tags?.map(t => <span key={t} style={{ fontSize: 9, background: '#222', color: C.textMuted, padding: '1px 5px', borderRadius: 4 }}>#{t}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
+      {/* ROADMAP ITEM EDITOR MODAL */}
+      {showEditor && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 20
+        }} onClick={() => setShowEditor(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: C.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 440,
+            border: `1.5px solid ${C.border}`, boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}>
+            <Label text={editItem ? "✏️ EDITAR TAREFA" : "➕ NOVA TAREFA"} color={pColor} />
+            
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>TÍTULO DA TAREFA</div>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Estudar capítulo de contratos..."
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>DESCRIÇÃO (OPCIONAL)</div>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Detalhes, links ou lembretes..." rows={2}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 14, resize: 'none', fontFamily: 'inherit' }} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>STATUS</div>
+                <select value={status} onChange={e => setStatus(e.target.value)} style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, color: C.text, fontSize: 12, outline: 'none' }}>
+                  <option value="todo">🔴 To Do</option>
+                  <option value="in_progress">🟡 Em progresso</option>
+                  <option value="completed">🟢 Concluído</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>DIAS ESTIMADOS</div>
+                <input type="number" value={estDays} onChange={e => setEstDays(e.target.value)}
+                  style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, color: C.text, fontSize: 12, outline: 'none' }} />
+              </div>
+            </div>
+
+            {status === 'in_progress' && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.textMuted, marginBottom: 4 }}>
+                  <span>Progresso: {progress}%</span>
+                </div>
+                <input type="range" min="0" max="100" value={progress} onChange={e => setProgress(parseInt(e.target.value))}
+                  style={{ width: '100%', accentColor: pColor, cursor: 'pointer' }} />
+              </div>
+            )}
+
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>TAGS</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <input value={tagInput} onChange={e => setTagInput(e.target.value)} placeholder="Ex: penal"
+                style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 10px', color: C.text, fontSize: 12, outline: 'none' }} />
+              <button onClick={handleAddTag} style={{
+                padding: '6px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, color: pColor, fontSize: 11, fontWeight: 'bold', cursor: 'pointer'
+              }}>+</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
+              {tags.map(t => (
+                <span key={t} onClick={() => handleRemoveTag(t)} style={{
+                  fontSize: 10, background: C.bg, border: `1px solid ${C.border}`, color: C.text, padding: '3px 8px', borderRadius: 6, cursor: 'pointer'
+                }}>#{t} ×</span>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              {editItem && <Btn label="DELETAR" variant="critical" onClick={handleDelete} />}
+              <Btn label="CANCELAR" variant="secondary" onClick={() => setShowEditor(false)} full={!editItem} />
+              <Btn label="SALVAR" variant="primary" onClick={handleSave} full activeColor={pColor} />
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// ─── ABA 3: EVOLUÇÃO (METRICAS E HEATMAP) ───
+function ProjectEvolucao({ state, activeProject, triggerToast }) {
+  const pColor = activeProject.color || C.accent;
+  
+  // Filter history
+  const projectMissions = (state.missions || []).filter(m => m.project_id === activeProject.id);
+  const completedMissions = projectMissions.filter(m => m.status === 'done');
+
+  // Heatmap rendering logic
+  const getPast30Days = () => {
+    const dates = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const offset = d.getTimezoneOffset();
+      const localDate = new Date(d.getTime() - offset * 60 * 1000);
+      dates.push(localDate.toISOString().split('T')[0]);
+    }
+    return dates;
+  };
+
+  const dates = getPast30Days();
+
+  const getDayClass = (dateStr) => {
+    const dayMissions = completedMissions.filter(m => m.completed_at?.startsWith(dateStr));
+    const count = dayMissions.length;
+    if (count === 0) return { bg: '#161B22', label: 'Inativo' };
+    if (count === 1) return { bg: `${pColor}44`, label: '1 missão' };
+    if (count === 2) return { bg: `${pColor}88`, label: '2 missões' };
+    return { bg: pColor, label: '3+ missões' };
+  };
+
+  const totalTimeMinutes = completedMissions.reduce((acc, m) => acc + (m.timer_used_minutes || 25), 0);
+  const totalHours = Math.floor(totalTimeMinutes / 60);
+  const remainingMinutes = totalTimeMinutes % 60;
+
+  const totalRoadmap = activeProject.roadmap ? activeProject.roadmap.length : 0;
+  const compRoadmap = activeProject.roadmap ? activeProject.roadmap.filter(r => r.status === 'completed').length : 0;
+  const roadmapPct = totalRoadmap > 0 ? Math.round((compRoadmap / totalRoadmap) * 100) : 0;
+
+  return (
+    <div className="two-col-grid" style={{ padding: '0 16px 100px' }}>
+      
+      {/* SEÇÃO 1: RESUMO DO PROJETO */}
+      <div className="full-width-col">
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="📈 METRICAS DE CONSISTÊNCIA" color={pColor} />
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginTop: 14 }}>
+            <div style={{ background: C.bg, border: `1.2px solid ${C.border}`, borderRadius: 10, padding: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 9, fontFamily: 'monospace', color: C.textMuted }}>MÉTAS CONCLUÍDAS</div>
+              <div style={{ fontSize: 24, fontWeight: 'bold', color: C.text, marginTop: 4 }}>{completedMissions.length}</div>
+            </div>
+            <div style={{ background: C.bg, border: `1.2px solid ${C.border}`, borderRadius: 10, padding: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 9, fontFamily: 'monospace', color: C.textMuted }}>TEMPO TOTAL ACUMULADO</div>
+              <div style={{ fontSize: 20, fontWeight: 'bold', color: pColor, marginTop: 7 }}>{totalHours}h {remainingMinutes}m</div>
+            </div>
+            <div style={{ background: C.bg, border: `1.2px solid ${C.border}`, borderRadius: 10, padding: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 9, fontFamily: 'monospace', color: C.textMuted }}>PROGRESSO ROADMAP</div>
+              <div style={{ fontSize: 24, fontWeight: 'bold', color: C.success, marginTop: 4 }}>{roadmapPct}%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SEÇÃO 2: HEATMAP DOS DIAS */}
+      <div style={{ padding: '0 16px' }} className="full-width-col">
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="🔥 ATIVIDADE NOS ÚLTIMOS 30 DIAS" color={pColor} />
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 6, margin: '14px 0' }}>
+            {dates.map(dateStr => {
+              const dayObj = getDayClass(dateStr);
+              return (
+                <div key={dateStr} style={{
+                  width: '100%', aspectRatio: '1', background: dayObj.bg, borderRadius: 4,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }} title={`${dateStr}: ${dayObj.label}`} />
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, fontFamily: 'monospace', color: C.textMuted }}>
+            <span>Menos ativo</span>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <span style={{ width: 8, height: 8, background: '#161B22', borderRadius: 1 }} />
+              <span style={{ width: 8, height: 8, background: `${pColor}44`, borderRadius: 1 }} />
+              <span style={{ width: 8, height: 8, background: `${pColor}88`, borderRadius: 1 }} />
+              <span style={{ width: 8, height: 8, background: pColor, borderRadius: 1 }} />
+            </div>
+            <span>Mais ativo</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SEÇÃO 3: TIMELINE DE PROGRESSO */}
+      <div style={{ padding: '0 16px' }} className="full-width-col">
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+          <Label text="📊 PROJEÇÃO DE CONCLUSÃO" />
+          <div style={{ margin: '14px 0 6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
+              <span>Conclusão Geral do Projeto</span>
+              <span>{roadmapPct}%</span>
+            </div>
+            <div style={{ width: '100%', height: 8, background: '#222', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ width: `${roadmapPct}%`, background: pColor, height: '100%', borderRadius: 4 }} />
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4, marginTop: 8 }}>
+            Projeção: Conclua os itens restantes na aba de **Roadmap** para aumentar a porcentagem geral.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+// ─── ABA 4: ANOTAÇÕES ───
+function ProjectAnotacoes({ state, setState, activeProject, triggerToast }) {
+  const [noteText, setNoteText] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const pColor = activeProject.color || C.accent;
+  const notes = activeProject.notes || [];
+
+  const handleAddNote = () => {
+    if (!noteText.trim()) return;
+    
+    const parsedTags = tagInput.split(',').map(t => t.trim().replace('#', '')).filter(t => t.length > 0);
+    
+    const newNote = {
+      id: 'note-' + Date.now(),
+      content: noteText.trim(),
+      tags: parsedTags.length > 0 ? parsedTags : ['Anotação'],
+      created_at: new Date().toISOString()
+    };
+
+    setState(s => {
+      const projects = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          return { ...p, notes: [newNote, ...(p.notes || [])] };
+        }
+        return p;
+      });
+      return { ...s, projects };
+    });
+
+    setNoteText('');
+    setTagInput('');
+    triggerToast('Anotação criada!', 'success');
+  };
+
+  const handleDeleteNote = (noteId) => {
+    setState(s => {
+      const projects = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          return { ...p, notes: (p.notes || []).filter(n => n.id !== noteId) };
+        }
+        return p;
+      });
+      return { ...s, projects };
+    });
+    triggerToast('Anotação excluída.', 'warning');
+  };
+
+  const filteredNotes = notes.filter(n => {
+    const query = searchQuery.toLowerCase();
+    if (!query) return true;
+    return n.content.toLowerCase().includes(query) || n.tags.some(t => t.toLowerCase().includes(query));
+  });
+
+  return (
+    <div className="two-col-grid" style={{ padding: '0 16px 100px' }}>
+      
+      {/* CRIADOR DE ANOTAÇÃO */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+        <Label text="📝 NOVA ANOTAÇÃO" color={pColor} />
+        
+        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Escreva notas livres, insights ou tarefas..." rows={3}
+          style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12, resize: 'none', fontFamily: 'inherit' }} />
+        
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <input value={tagInput} onChange={e => setTagInput(e.target.value)} placeholder="Tags separadas por vírgula (ex: Dúvida, STF)"
+            style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.text, fontSize: 12, outline: 'none' }} />
+          <Btn label="CADASTRAR" variant="primary" small onClick={handleAddNote} activeColor={pColor} />
+        </div>
+      </div>
+
+      {/* FILTRO E LISTA DE ANOTAÇÕES */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 Buscar por tag ou termo..."
+            style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', color: C.text, fontSize: 13, outline: 'none' }} />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 400, overflowY: 'auto' }}>
+          {filteredNotes.map(n => (
+            <div key={n.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {n.tags?.map(t => <span key={t} style={{ fontSize: 9, background: '#222', color: pColor, padding: '2px 6px', borderRadius: 4, fontWeight: 'bold' }}>#{t}</span>)}
+                </div>
+                <button onClick={() => handleDeleteNote(n.id)} style={{ background: 'none', border: 'none', color: C.critical, fontSize: 13, cursor: 'pointer' }}>×</button>
+              </div>
+              <p style={{ fontSize: 12, color: C.text, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{n.content}</p>
+              <div style={{ fontSize: 9, color: C.textMuted, marginTop: 8, textAlign: 'right', fontFamily: 'monospace' }}>
+                {new Date(n.created_at).toLocaleDateString('pt-BR')} {new Date(n.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          ))}
+
+          {filteredNotes.length === 0 && (
+            <div style={{ textTransform: 'uppercase', textAlign: 'center', fontSize: 10, fontFamily: 'monospace', color: C.textMuted, padding: '24px 0' }}>
+              Nenhuma anotação encontrada.
+            </div>
+          )}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+// ─── ABA 5: CONFIGURAÇÕES DO PROJETO ───
+function ProjectConfig({ state, setState, activeProject, triggerToast }) {
+  const [name, setName] = useState(activeProject.name);
+  const [desc, setDesc] = useState(activeProject.description || '');
+  const [emoji, setEmoji] = useState(activeProject.emoji || '🎯');
+  const [color, setColor] = useState(activeProject.color || '#00D4FF');
+  const [defTimer, setDefTimer] = useState(activeProject.defaultTimer ? Math.round(activeProject.defaultTimer / 60) : 25);
+
+  const pColor = activeProject.color || C.accent;
+  const EMOJIS = ['📚', '📱', '🏋️', '💼', '🎯', '🎨', '🚀', '❤️', '💡', '🔥'];
+
+  const handleUpdate = () => {
+    if (!name.trim()) return;
+    setState(s => {
+      const updated = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          return {
+            ...p,
+            name: name.trim(),
+            description: desc.trim(),
+            emoji,
+            color,
+            defaultTimer: (parseInt(defTimer) || 25) * 60
+          };
+        }
+        return p;
+      });
+      return { ...s, projects: updated };
+    });
+    triggerToast('Configurações salvas!', 'success');
+  };
+
+  const handleReset = () => {
+    if (!window.confirm("Deseja realmente apagar o histórico e roadmap deste projeto?")) return;
+    setState(s => {
+      const updated = s.projects.map(p => {
+        if (p.id === activeProject.id) {
+          return { ...p, roadmap: [], notes: [] };
+        }
+        return p;
+      });
+      const updatedMissions = (s.missions || []).filter(m => m.project_id !== activeProject.id);
+      return { ...s, projects: updated, missions: updatedMissions };
+    });
+    triggerToast('Projeto resetado com sucesso.', 'warning');
+  };
+
+  const handleDelete = () => {
+    if (!window.confirm("ATENÇÃO: Deseja realmente excluir este projeto e todos os seus dados permanentemente?")) return;
+    setState(s => {
+      const updated = s.projects.filter(p => p.id !== activeProject.id);
+      const updatedMissions = (s.missions || []).filter(m => m.project_id !== activeProject.id);
+      return { ...s, projects: updated, missions: updatedMissions, activeProjectId: null };
+    });
+    triggerToast('Projeto deletado.', 'warning');
+  };
+
+  return (
+    <div className="two-col-grid" style={{ padding: '0 16px 100px' }}>
+      
+      {/* INFORMAÇÕES DO PROJETO */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+        <Label text="⚙️ DEFINIÇÕES DO PROJETO" color={pColor} />
+
+        <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6, marginTop: 12 }}>NOME DO PROJETO</div>
+        <input value={name} onChange={e => setName(e.target.value)}
+          style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+
+        <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>DESCRIÇÃO</div>
+        <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2}
+          style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 14, resize: 'none', fontFamily: 'inherit' }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 6 }}>TEMPO TIMER PADRÃO (MINUTOS)</div>
+            <input type="number" value={defTimer} onChange={e => setDefTimer(e.target.value)}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, color: C.text, fontSize: 12, outline: 'none' }} />
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 8 }}>EMOJI</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          {EMOJIS.map(em => (
+            <button key={em} onClick={() => setEmoji(em)} style={{
+              padding: 8, background: emoji === em ? `${pColor}15` : 'transparent',
+              border: `1.2px solid ${emoji === em ? pColor : C.border}`, borderRadius: 8, fontSize: 18, cursor: 'pointer'
+            }}>{em}</button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', marginBottom: 8 }}>COR TEMÁTICA</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+          {THEME_COLORS.map(col => (
+            <button key={col.hex} onClick={() => setColor(col.hex)} style={{
+              width: 26, height: 26, borderRadius: '50%', background: col.hex, cursor: 'pointer',
+              border: `2px solid ${color === col.hex ? '#FFF' : 'transparent'}`
+            }} title={col.name} />
+          ))}
+        </div>
+
+        <Btn label="SALVAR CONFIGURAÇÕES ✓" variant="primary" onClick={handleUpdate} full activeColor={pColor} />
+      </div>
+
+      {/* AÇÕES DE EXCLUSÃO */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+        <Label text="⚠️ CONTROLE DE DADOS" color={C.critical} />
+        <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 16, lineHeight: 1.4 }}>Ações irreversíveis do projeto.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Btn label="RESTAURAR E RESETAR DADOS DO PROJETO" variant="critical" onClick={handleReset} full />
+          <Btn label="EXCLUIR PROJETO DEFINITIVAMENTE" variant="critical" onClick={handleDelete} full />
+        </div>
+      </div>
+
+    </div>
+  );
 }
 
 // ─── ABA CRONOGRAMA ───
-function TabCronograma({state,setState,toast}){
+function TabCronograma({state, setState, toast}) {
   const checked = state.cronograma?.checked || {};
   const totalAtividades = CRONOGRAMA_PILARES.reduce((s,p)=>s+p.atividades.length,0);
   const totalDone = CRONOGRAMA_PILARES.reduce((s,p)=>s+p.atividades.filter(a=>checked[a.id]).length,0);
   const allComplete = totalDone===totalAtividades;
 
-  const [showCelebration,setShowCelebration]=useState(false);
-  const [prevAllComplete,setPrevAllComplete]=useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [prevAllComplete, setPrevAllComplete] = useState(false);
 
-  useEffect(()=>{
-    if(allComplete&&!prevAllComplete){
+  useEffect(() => {
+    if (allComplete && !prevAllComplete) {
       setShowCelebration(true);
       toast('🏆 CRONOGRAMA COMPLETO! Dia de vitória total.');
-      setTimeout(()=>setShowCelebration(false),3000);
+      setTimeout(() => setShowCelebration(false), 3000);
     }
     setPrevAllComplete(allComplete);
-  },[allComplete]);
+  }, [allComplete]);
 
-  const toggleAtividade=(atividade,pilar)=>{
-    const wasChecked=checked[atividade.id];
-    const newChecked={...checked};
-    if(wasChecked){delete newChecked[atividade.id];}
-    else{newChecked[atividade.id]=true;}
+  const toggleAtividade = (atividade, pilar) => {
+    const wasChecked = checked[atividade.id];
+    const newChecked = { ...checked };
+    if (wasChecked) { delete newChecked[atividade.id]; }
+    else { newChecked[atividade.id] = true; }
 
-    setState(s=>({...s,cronograma:{...s.cronograma,checked:newChecked}}));
+    setState(s => ({ ...s, cronograma: { ...s.cronograma, checked: newChecked } }));
 
-    if(!wasChecked){
-      const pilarDone=pilar.atividades.filter(a=>newChecked[a.id]).length;
-      const pilarTotal=pilar.atividades.length;
-      if(pilarDone===pilarTotal){
+    if (!wasChecked) {
+      const pilarDone = pilar.atividades.filter(a => newChecked[a.id]).length;
+      const pilarTotal = pilar.atividades.length;
+      if (pilarDone === pilarTotal) {
         toast(`${pilar.icon} ${pilar.label} completa! +força espiritual.`);
       } else {
-        const msgs={
-          mente:'Mente fortalecida. Continue evoluindo.',
-          alma:'Alma reforçada. Mantenha a conexão.',
-          trabalho:'Trabalho avançando. Execute com excelência.',
-          saude:'Saúde protegida. Corpo em movimento.',
+        const msgs = {
+          mente: 'Mente fortalecida. Continue evoluindo.',
+          alma: 'Alma reforçada. Mantenha a conexão.',
+          trabalho: 'Trabalho avançando. Execute com excelência.',
+          saude: 'Saúde protegida. Corpo em movimento.',
         };
         toast(`✓ ${atividade.label} concluída. ${msgs[pilar.id]}`);
       }
     }
   };
 
-  return <div style={{padding:'14px 16px 100px'}}>
-    {/* Keyframes */}
-    <style>{`
-      @keyframes cronogramaGlow{
-        0%{box-shadow:0 0 8px rgba(201,169,106,0.2)}
-        50%{box-shadow:0 0 24px rgba(201,169,106,0.5)}
-        100%{box-shadow:0 0 8px rgba(201,169,106,0.2)}
-      }
-      @keyframes cronogramaGoldBorder{
-        0%{border-color:#C9A96A}
-        50%{border-color:#F59E0B}
-        100%{border-color:#C9A96A}
-      }
-      @keyframes checkPop{
-        0%{transform:scale(0.8)}
-        50%{transform:scale(1.2)}
-        100%{transform:scale(1)}
-      }
-    `}</style>
+  return (
+    <div style={{ padding: '14px 16px 100px' }}>
+      <style>{`
+        @keyframes cronogramaGlow {
+          0% { box-shadow: 0 0 8px rgba(201,169,106,0.2) }
+          50% { box-shadow: 0 0 24px rgba(201,169,106,0.5) }
+          100% { box-shadow: 0 0 8px rgba(201,169,106,0.2) }
+        }
+        @keyframes cronogramaGoldBorder {
+          0% { border-color: #1F2937 }
+          50% { border-color: #C9A96A }
+          100% { border-color: #1F2937 }
+        }
+        @keyframes checkPop {
+          0% { transform: scale(0.8) }
+          50% { transform: scale(1.2) }
+          100% { transform: scale(1) }
+        }
+      `}</style>
 
-    {/* Celebration overlay */}
-    {showCelebration&&<div style={{position:'fixed',inset:0,background:'rgba(11,11,15,0.9)',display:'flex',
-      flexDirection:'column',alignItems:'center',justifyContent:'center',zIndex:500,padding:32}}>
-      <div style={{fontSize:72,marginBottom:16,animation:'checkPop 0.5s ease'}}>🏆</div>
-      <div style={{fontSize:24,fontFamily:'Georgia,serif',color:C.gold,textAlign:'center',marginBottom:8}}>DIA DE VITÓRIA TOTAL</div>
-      <div style={{fontSize:13,color:C.textSub,fontFamily:'monospace',textAlign:'center'}}>16/16 atividades concluídas. Você é imparável.</div>
-    </div>}
-
-    {/* Header com progresso geral */}
-    <SpotlightCard style={{
-      background:'linear-gradient(135deg,#101828,#0D1F35)',
-      border:`1.5px solid ${allComplete?C.gold:C.border}`,
-      borderRadius:16,padding:'14px 16px',marginBottom:16,
-      animation:allComplete?'cronogramaGoldBorder 2s ease infinite':'none'
-    }}>
-      <Label text="📋 CRONOGRAMA DO GUERREIRO" color={C.gold}/>
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
-        <div style={{fontSize:28,fontFamily:'Georgia,serif',color:C.text}}>{totalDone}/{totalAtividades}</div>
-        <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace'}}>atividades concluídas</div>
-      </div>
-      {/* Barra de progresso geral */}
-      <div style={{width:'100%',height:6,background:C.bgSub,borderRadius:3,overflow:'hidden'}}>
+      {showCelebration && (
         <div style={{
-          width:`${(totalDone/totalAtividades)*100}%`,
-          height:'100%',
-          background:allComplete?C.gold:C.green,
-          borderRadius:3,
-          transition:'width 0.4s ease'
-        }}/>
-      </div>
-      {allComplete&&<div style={{fontSize:11,color:C.gold,fontFamily:'monospace',marginTop:8,letterSpacing:'0.08em'}}>🏆 CRONOGRAMA COMPLETO — DIA DE VITÓRIA</div>}
-    </SpotlightCard>
-
-    {/* Grid dos 4 pilares */}
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-      {CRONOGRAMA_PILARES.map(pilar=>{
-        const pilarDone=pilar.atividades.filter(a=>checked[a.id]).length;
-        const pilarComplete=pilarDone===pilar.atividades.length;
-        const pct=pilar.atividades.length>0?(pilarDone/pilar.atividades.length)*100:0;
-
-        return <SpotlightCard key={pilar.id} style={{
-          background:pilarComplete
-            ?`linear-gradient(135deg,${pilar.cor}15,${pilar.cor}08)`
-            :C.bgCard,
-          border:`1.5px solid ${pilarComplete?pilar.cor+'80':C.border}`,
-          borderRadius:16,padding:'14px 14px',
-          transition:'all 0.3s ease',
-          animation:pilarComplete?'cronogramaGlow 2s ease infinite':'none'
+          position: 'fixed', inset: 0, background: 'rgba(11,11,15,0.9)', display: 'flex',
+          flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 32
         }}>
-          {/* Header do pilar */}
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-            <div style={{display:'flex',alignItems:'center',gap:6}}>
-              <span style={{fontSize:18}}>{pilar.icon}</span>
-              <span style={{fontSize:10,fontFamily:'monospace',fontWeight:700,letterSpacing:'0.1em',
-                color:pilarComplete?pilar.cor:C.text}}>{pilar.label}</span>
-            </div>
-            <span style={{fontSize:10,fontFamily:'monospace',color:pilarComplete?pilar.cor:C.textSub,
-              fontWeight:700}}>{pilarDone}/{pilar.atividades.length}</span>
-          </div>
-          <div style={{fontSize:9,color:C.textSub,fontFamily:'monospace',marginBottom:10,opacity:0.7}}>{pilar.descricao}</div>
+          <div style={{ fontSize: 72, marginBottom: 16, animation: 'checkPop 0.5s ease' }}>🏆</div>
+          <div style={{ fontSize: 24, fontFamily: 'Georgia,serif', color: C.gold, textAlign: 'center', marginBottom: 8 }}>DIA DE VITÓRIA TOTAL</div>
+          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: 'monospace', textAlign: 'center' }}>16/16 atividades concluídas. Você é imparável.</div>
+        </div>
+      )}
 
-          {/* Mini progress bar */}
-          <div style={{width:'100%',height:3,background:C.bgSub,borderRadius:2,overflow:'hidden',marginBottom:10}}>
-            <div style={{
-              width:`${pct}%`,
-              height:'100%',
-              background:pilar.cor,
-              borderRadius:2,
-              transition:'width 0.3s ease'
-            }}/>
-          </div>
+      <SpotlightCard style={{
+        background: 'linear-gradient(135deg,#101828,#0D1F35)',
+        border: `1.5px solid ${allComplete ? C.gold : C.border}`,
+        borderRadius: 16, padding: '14px 16px', marginBottom: 16,
+        animation: allComplete ? 'cronogramaGoldBorder 2s ease infinite' : 'none'
+      }}>
+        <Label text="📋 CRONOGRAMA DO GUERREIRO" color={C.gold} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <div style={{ fontSize: 28, fontFamily: 'Georgia,serif', color: C.text }}>{totalDone}/{totalAtividades}</div>
+          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace' }}>atividades concluídas</div>
+        </div>
+        <div style={{ width: '100%', height: 6, background: '#222', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{
+            width: `${(totalDone / totalAtividades) * 100}%`,
+            height: '100%',
+            background: allComplete ? C.gold : C.success,
+            borderRadius: 3,
+            transition: 'width 0.4s ease'
+          }} />
+        </div>
+        {allComplete && <div style={{ fontSize: 11, color: C.gold, fontFamily: 'monospace', marginTop: 8, letterSpacing: '0.08em' }}>🏆 CRONOGRAMA COMPLETO — DIA DE VITÓRIA</div>}
+      </SpotlightCard>
 
-          {/* Lista de atividades */}
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {pilar.atividades.map(atv=>{
-              const isChecked=checked[atv.id];
-              return <div key={atv.id} onClick={()=>toggleAtividade(atv,pilar)}
-                style={{
-                  display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',
-                  padding:'6px 8px',borderRadius:8,
-                  background:isChecked?`${pilar.cor}10`:'transparent',
-                  transition:'background 0.2s ease'
-                }}>
-                {/* Custom checkbox */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {CRONOGRAMA_PILARES.map(pilar => {
+          const pilarDone = pilar.atividades.filter(a => checked[a.id]).length;
+          const pilarComplete = pilarDone === pilar.atividades.length;
+          const pct = pilar.atividades.length > 0 ? (pilarDone / pilar.atividades.length) * 100 : 0;
+
+          return (
+            <SpotlightCard key={pilar.id} style={{
+              background: pilarComplete ? `linear-gradient(135deg,${pilar.cor}15,${pilar.cor}08)` : C.surface,
+              border: `1.5px solid ${pilarComplete ? pilar.cor + '80' : C.border}`,
+              borderRadius: 16, padding: '14px 14px',
+              transition: 'all 0.3s ease',
+              animation: pilarComplete ? 'cronogramaGlow 2s ease infinite' : 'none'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 18 }}>{pilar.icon}</span>
+                  <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.1em', color: pilarComplete ? pilar.cor : C.text }}>{pilar.label}</span>
+                </div>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: pilarComplete ? pilar.cor : C.textMuted, fontWeight: 700 }}>{pilarDone}/{pilar.atividades.length}</span>
+              </div>
+              <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 10, opacity: 0.7 }}>{pilar.descricao}</div>
+
+              <div style={{ width: '100%', height: 3, background: '#222', borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
                 <div style={{
-                  width:18,height:18,minWidth:18,borderRadius:'50%',
-                  border:`2px solid ${isChecked?pilar.cor:C.textSub+'60'}`,
-                  background:isChecked?pilar.cor:'transparent',
-                  display:'flex',alignItems:'center',justifyContent:'center',
-                  transition:'all 0.2s ease',
-                  animation:isChecked?'checkPop 0.3s ease':'none',
-                  marginTop:1
-                }}>
-                  {isChecked&&<svg width={10} height={10} viewBox="0 0 10 10" fill="none">
-                    <path d="M2 5L4.5 7.5L8 3" stroke="#0B0B0F" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>}
-                </div>
-                {/* Label e micro */}
-                <div style={{flex:1}}>
-                  <div style={{
-                    fontSize:11,fontFamily:'monospace',fontWeight:600,
-                    color:isChecked?pilar.cor:C.text,
-                    textDecoration:isChecked?'line-through':'none',
-                    opacity:isChecked?0.7:1,
-                    transition:'all 0.2s ease'
-                  }}>{atv.label}</div>
-                  <div style={{fontSize:9,color:C.textSub,fontFamily:'monospace',marginTop:2,opacity:isChecked?0.4:0.7}}>{atv.micro}</div>
-                </div>
-              </div>;
-            })}
-          </div>
-        </SpotlightCard>;
-      })}
-    </div>
+                  width: `${pct}%`,
+                  height: '100%',
+                  background: pilar.cor,
+                  borderRadius: 2,
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
 
-    {/* Resumo final */}
-    <SpotlightCard style={{
-      background:C.bgCard,border:`1px solid ${C.border}`,
-      borderRadius:16,padding:'14px 16px',marginTop:16
-    }}>
-      <Label text="📊 RESUMO DOS PILARES"/>
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {CRONOGRAMA_PILARES.map(p=>{
-          const done=p.atividades.filter(a=>checked[a.id]).length;
-          const complete=done===p.atividades.length;
-          return <div key={p.id} style={{display:'flex',alignItems:'center',gap:10}}>
-            <span style={{fontSize:16}}>{p.icon}</span>
-            <div style={{flex:1}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                <span style={{fontSize:10,fontFamily:'monospace',fontWeight:700,color:complete?p.cor:C.text,letterSpacing:'0.08em'}}>{p.label}</span>
-                <span style={{fontSize:10,fontFamily:'monospace',color:complete?p.cor:C.textSub}}>{done}/{p.atividades.length}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {pilar.atividades.map(atv => {
+                  const isChecked = checked[atv.id];
+                  return (
+                    <div key={atv.id} onClick={() => toggleAtividade(atv, pilar)}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer',
+                        padding: '6px 8px', borderRadius: 8,
+                        background: isChecked ? `${pilar.cor}10` : 'transparent',
+                        transition: 'background 0.2s ease'
+                      }}>
+                      <div style={{
+                        width: 18, height: 18, minWidth: 18, borderRadius: '50%',
+                        border: `2px solid ${isChecked ? pilar.cor : C.textMuted + '60'}`,
+                        background: isChecked ? pilar.cor : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'all 0.2s ease',
+                        animation: isChecked ? 'checkPop 0.3s ease' : 'none',
+                        marginTop: 1
+                      }}>
+                        {isChecked && (
+                          <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                            <path d="M2 5L4.5 7.5L8 3" stroke="#0B0B0F" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: 11, fontFamily: 'monospace', fontWeight: 600,
+                          color: isChecked ? pilar.cor : C.text,
+                          textDecoration: isChecked ? 'line-through' : 'none',
+                          opacity: isChecked ? 0.7 : 1,
+                          transition: 'all 0.2s ease'
+                        }}>{atv.label}</div>
+                        <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginTop: 2, opacity: isChecked ? 0.4 : 0.7 }}>{atv.micro}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{width:'100%',height:4,background:C.bgSub,borderRadius:2,overflow:'hidden'}}>
-                <div style={{width:`${p.atividades.length>0?(done/p.atividades.length)*100:0}%`,
-                  height:'100%',background:p.cor,borderRadius:2,transition:'width 0.3s ease'}}/>
-              </div>
-            </div>
-            {complete&&<span style={{fontSize:12}}>✓</span>}
-          </div>;
+            </SpotlightCard>
+          );
         })}
       </div>
-    </SpotlightCard>
-  </div>;
+
+      <SpotlightCard style={{
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 16, padding: '14px 16px', marginTop: 16
+      }}>
+        <Label text="📊 RESUMO DOS PILARES" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {CRONOGRAMA_PILARES.map(p => {
+            const done = p.atividades.filter(a => checked[a.id]).length;
+            const complete = done === p.atividades.length;
+            return (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 16 }}>{p.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: complete ? p.cor : C.text, letterSpacing: '0.08em' }}>{p.label}</span>
+                    <span style={{ fontSize: 10, fontFamily: 'monospace', color: complete ? p.cor : C.textMuted }}>{done}/{p.atividades.length}</span>
+                  </div>
+                  <div style={{ width: '100%', height: 4, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: `${p.atividades.length > 0 ? (done / p.atividades.length) * 100 : 0}%`,
+                      height: '100%', background: p.cor, borderRadius: 2, transition: 'width 0.3s ease' }} />
+                  </div>
+                </div>
+                {complete && <span style={{ fontSize: 12, color: C.success }}>✓</span>}
+              </div>
+            );
+          })}
+        </div>
+      </SpotlightCard>
+    </div>
+  );
 }
 
-export default function App(){
-  const [tab,setTab]=useState('hoje');
-  const [toastMsg,setToastMsg]=useState(null);
-  const toast=m=>{setToastMsg(m);setTimeout(()=>setToastMsg(null),2200);};
-
-  const [loading,setLoading]=useState(true);
-  const [showHelp,setShowHelp]=useState(false); // Ajuda flutuante
-  const [history,setHistory]=useState([]); // Histórico dos últimos 30 dias
-  const [state,setState]=useState({
-    mission:null,
-    action:null,
-    opState:null,
-    tiredChip:null,
-    streak:0,
-    flags:{missao:false,acao:false,fuga:false,eus:false,naoZerou:false},
-    fixedEscapes:[],
-    eus:{passado:'',presente:'',futuro:''},
-    eusSaved:false,
-    conversion:{consumidos:0,aplicados:0},
-    panel:{fe:3,familia:3,saude:3,estudo:3,empresa:3},
-    corrDone:false,
-    cronograma:{checked:{}},
+// ─── MAIN APP COMPONENT ───
+export default function App() {
+  const [mainTab, setMainTab] = useState('dashboard');
+  const [projectTab, setProjectTab] = useState('hoje');
+  const [toastMsg, setToastMsg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [history, setHistory] = useState([]);
+  
+  const [state, setState] = useState({
+    cronograma: { checked: {} },
+    projects: [],
+    activeProjectId: null,
+    missions: [],
+    mission: null,
+    action: null,
+    opState: null,
+    fugaTipo: null,
+    microAction: '',
+    modoMinimo: false,
+    streak: 0,
+    flags: { missao: false, acao: false, fuga: false, eus: false, naoZerou: false },
+    fixedEscapes: [],
+    eus: { passado: '', presente: '', futuro: '' },
+    eusSaved: false,
+    conversion: { consumidos: 0, aplicados: 0 },
+    panel: { fe: 3, familia: 3, saude: 3, estudo: 3, carreira: 3 },
+    customPrinciples: [
+      { id: 1, titulo: 'Família acima de tudo', acao: 'Conversar intencionalmente por 10 minutos' },
+      { id: 2, titulo: 'Execução mata perfeição', acao: 'Escrever a versão simples em 5 minutos' },
+      { id: 3, titulo: 'Consistência vence sempre', acao: 'Resolver 5 questões ou ler 1 página' }
+    ],
+    customAnchors: [
+      { id: 1, titulo: 'Concluí TCC em 2 semanas', cat: 'Estudos', desc: 'Resiliência e velocidade sob pressão.' },
+      { id: 2, titulo: 'Mantive treino 90 dias seguidos', cat: 'Saúde', desc: 'Constância física e superação diária.' },
+      { id: 3, titulo: 'Passei em 3 disciplinas de Direito', cat: 'Estudo', desc: 'Foco intelectual concentrado e produtividade.' }
+    ],
+    constitutionChecks: {},
   });
+
+  // Global Timer States
+  const [timeLeft, setTimeLeft] = useState(1500);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerProjectId, setTimerProjectId] = useState(null);
+  const timerRef = useRef(null);
+
+  const triggerToast = (msg, type = 'info') => {
+    setToastMsg({ msg, type });
+  };
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -1213,19 +2033,75 @@ export default function App(){
     return dates;
   };
 
+  const migrateLegacyState = (parsed) => {
+    if (!parsed) return parsed;
+    
+    // Convert empresa to carreira panel area
+    if (parsed.panel && parsed.panel.empresa !== undefined && parsed.panel.carreira === undefined) {
+      parsed.panel.carreira = parsed.panel.empresa;
+      delete parsed.panel.empresa;
+    }
+
+    // Migrate standard single-mission structures to multi-project array
+    if (!parsed.projects || parsed.projects.length === 0) {
+      const defaultProject = {
+        id: 'geral',
+        name: 'Geral',
+        description: 'Painel Geral de Atividades',
+        emoji: '🎯',
+        color: '#00D4FF',
+        defaultTimer: 1500,
+        roadmap: [],
+        notes: []
+      };
+      parsed.projects = [defaultProject];
+
+      // Convert legacy missions
+      if (parsed.missions) {
+        parsed.missions = parsed.missions.map(m => ({
+          ...m,
+          project_id: m.project_id || 'geral',
+          area: m.area === 'empresa' ? 'carreira' : m.area
+        }));
+      } else {
+        parsed.missions = parsed.mission ? [{
+          titulo: parsed.mission.titulo,
+          prova: parsed.mission.prova,
+          area: parsed.mission.area === 'empresa' ? 'carreira' : parsed.mission.area,
+          status: parsed.action?.status || 'pendente',
+          project_id: 'geral',
+          created_at: new Date().toISOString()
+        }] : [];
+      }
+    } else {
+      // Map company to career inside loaded missions
+      if (parsed.missions) {
+        parsed.missions = parsed.missions.map(m => ({
+          ...m,
+          area: m.area === 'empresa' ? 'carreira' : m.area
+        }));
+      }
+    }
+    return parsed;
+  };
+
+  // State loader
   useEffect(() => {
     async function loadState() {
       try {
         const todayStr = getLocalDateString();
         
-        // 1. Tentar ler do LocalStorage como fallback imediato
+        // LocalStorage fallback load
         const localData = localStorage.getItem('guerreiro_state');
         if (localData) {
           try {
-            const parsed = JSON.parse(localData);
-            if (parsed) setState(parsed);
+            let parsed = JSON.parse(localData);
+            if (parsed) {
+              parsed = migrateLegacyState(parsed);
+              setState(prev => ({ ...prev, ...parsed }));
+            }
           } catch (e) {
-            console.error('Erro ao analisar LocalStorage state:', e);
+            console.error('LocalStorage load err:', e);
           }
         }
 
@@ -1235,17 +2111,16 @@ export default function App(){
             const parsedHist = JSON.parse(localHistData);
             if (parsedHist) setHistory(parsedHist);
           } catch (e) {
-            console.error('Erro ao analisar LocalStorage history:', e);
+            console.error('LocalStorage history load err:', e);
           }
         }
 
-        // 2. Se o Supabase não estiver configurado, finaliza aqui
+        // Supabase load
         if (!isSupabaseConfigured) {
           setLoading(false);
           return;
         }
 
-        // 3. Se estiver configurado, carrega do Supabase
         const { data, error } = await supabase
           .from('guerreiro_daily_states')
           .select('state')
@@ -1254,7 +2129,6 @@ export default function App(){
 
         if (error) throw error;
 
-        // Também carrega o histórico dos últimos 30 dias do Supabase
         const { data: histData } = await supabase
           .from('guerreiro_daily_states')
           .select('date, state')
@@ -1264,9 +2138,11 @@ export default function App(){
         if (histData) setHistory(histData);
 
         if (data && data.state) {
-          setState(data.state);
+          let loaded = data.state;
+          loaded = migrateLegacyState(loaded);
+          setState(prev => ({ ...prev, ...loaded }));
         } else {
-          // Busca o dia anterior mais recente para herdar o streak e painel da vida
+          // New day load previous stats
           const { data: prevData, error: prevError } = await supabase
             .from('guerreiro_daily_states')
             .select('date, state')
@@ -1279,29 +2155,37 @@ export default function App(){
 
           if (prevData && prevData.state) {
             const diff = getDaysDifference(prevData.date, todayStr);
-            const yesterdayWasSuccessful = prevData.state.flags?.naoZerou || prevData.state.flags?.acao;
+            const yesterdayWasSuccessful = prevData.state.flags?.naoZerou || prevData.state.modoMinimo || prevData.state.flags?.acao;
             const newStreak = (diff === 1 && yesterdayWasSuccessful) ? (prevData.state.streak || 0) : 0;
+            
+            const migratedPrev = migrateLegacyState(prevData.state);
 
-            setState({
+            setState(prev => ({
+              ...prev,
+              projects: migratedPrev.projects || [],
+              activeProjectId: null,
+              missions: [],
               mission: null,
               action: null,
               opState: null,
-              tiredChip: null,
+              fugaTipo: null,
+              modoMinimo: false,
               streak: newStreak,
               flags: { missao: false, acao: false, fuga: false, eus: false, naoZerou: false },
               fixedEscapes: [],
               eus: { passado: '', presente: '', futuro: '' },
               eusSaved: false,
-              conversion: { consumidos: 0, aplicados: 0 },
-              panel: prevData.state.panel || { fe: 3, familia: 3, saude: 3, estudo: 3, empresa: 3 },
-              corrDone: false,
-              cronograma:{checked:{}},
-            });
+              conversion: migratedPrev.conversion || { consumidos: 0, aplicados: 0 },
+              panel: migratedPrev.panel || { fe: 3, familia: 3, saude: 3, estudo: 3, carreira: 3 },
+              customPrinciples: migratedPrev.customPrinciples || prev.customPrinciples,
+              customAnchors: migratedPrev.customAnchors || prev.customAnchors,
+              constitutionChecks: {},
+            }));
           }
         }
       } catch (err) {
-        console.error('Erro ao carregar dados do Supabase:', err);
-        toast('Erro ao conectar ao banco de dados. Usando dados locais.');
+        console.error('Supabase load err:', err);
+        triggerToast('Dados locais carregados.', 'info');
       } finally {
         setLoading(false);
       }
@@ -1309,118 +2193,137 @@ export default function App(){
     loadState();
   }, []);
 
+  // State saver
   useEffect(() => {
     if (loading) return;
-
     const todayStr = getLocalDateString();
-
-    // Sempre salvar no LocalStorage como backup local
-    localStorage.setItem('guerreiro_state', JSON.stringify(state));
+    
+    // Save LocalStorage
+    const stateToSave = state;
+    localStorage.setItem('guerreiro_state', JSON.stringify(stateToSave));
 
     let localHist = [];
     try {
       const stored = localStorage.getItem('guerreiro_history');
       localHist = stored ? JSON.parse(stored) : [];
-    } catch(e){}
+    } catch (e) {}
     localHist = [
-      { date: todayStr, state: state },
+      { date: todayStr, state: stateToSave },
       ...localHist.filter(h => h.date !== todayStr)
     ].slice(0, 30);
     localStorage.setItem('guerreiro_history', JSON.stringify(localHist));
 
-    // Salvar no Supabase apenas se configurado
+    // Save Supabase
     if (!isSupabaseConfigured) return;
 
     const timeoutId = setTimeout(async () => {
       try {
-        const { error } = await supabase
+        await supabase
           .from('guerreiro_daily_states')
           .upsert({
             date: todayStr,
-            state: state,
+            state: stateToSave,
             updated_at: new Date().toISOString()
           });
-        if (error) throw error;
       } catch (err) {
-        console.error('Erro ao salvar dados no Supabase:', err);
+        console.error('Supabase save err:', err);
       }
     }, 800);
 
     return () => clearTimeout(timeoutId);
   }, [state, loading]);
 
-  const tabs=[{id:'hoje',icon:'⚡',l:'HOJE'},{id:'identidade',icon:'📜',l:'IDENTIDADE'},{id:'evolucao',icon:'📈',l:'EVOLUÇÃO'},{id:'cronograma',icon:'📋',l:'CRONOGRAMA'}];
-  const ti=tabs.find(t=>t.id===tab);
-
-  const changeTab=(id)=>{
-    if(id!=='hoje'&&state.opState==='trav'){
-      setState(s=>({...s,opState:null}));
+  // Global Timer Tick logic
+  useEffect(() => {
+    if (timerRunning) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            setTimerRunning(false);
+            
+            // Auto complete active mission in current project
+            const missions = state.missions || [];
+            const activeMission = missions.find(m => m.project_id === timerProjectId && m.status !== 'done');
+            if (activeMission) {
+              triggerToast(`Timer finalizado! Missão concluída!`, 'success');
+              
+              setState(s => {
+                const current = s.missions || [];
+                const updated = current.map(m => (m.project_id === timerProjectId && m.status !== 'done') ? { ...m, status: 'done', completed_at: new Date().toISOString() } : m);
+                
+                return {
+                  ...s,
+                  missions: updated,
+                  flags: { ...s.flags, acao: true, naoZerou: true },
+                  streak: s.flags.naoZerou ? s.streak : s.streak + 1
+                };
+              });
+            }
+            
+            const activeProject = state.projects?.find(p => p.id === timerProjectId);
+            return activeProject?.defaultTimer || 1500;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
     }
-    setTab(id);
+    return () => clearInterval(timerRef.current);
+  }, [timerRunning, timerProjectId, state.missions, state.projects]);
+
+  const activeProject = state.projects?.find(p => p.id === state.activeProjectId);
+  const pColor = activeProject?.color || C.accent;
+
+  // Global scores of today
+  const todayStr = getLocalDateString();
+  const todayMissions = (state.missions || []).filter(m => m.created_at?.split('T')[0] === todayStr || m.completed_at?.split('T')[0] === todayStr);
+  const completedToday = todayMissions.filter(m => m.status === 'done');
+  const fugaCount = state.fixedEscapes ? state.fixedEscapes.length : 0;
+  
+  const score = (todayMissions.length * PONTUACAO.MISSAO_DEFINIDA) +
+                (completedToday.length * PONTUACAO.MISSAO_CONCLUIDA) +
+                (fugaCount * PONTUACAO.CORRECAO_FUGA) +
+                (state.eusSaved ? PONTUACAO.REFLEXAO_3_EUS : 0) +
+                (state.modoMinimo ? PONTUACAO.MODO_MINIMO_ATIVADO : 0);
+
+  const classObj = classificarDia(score);
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
   };
+
+  // Sync Timer settings on project change
+  useEffect(() => {
+    if (activeProject) {
+      if (timerProjectId !== activeProject.id) {
+        setTimerProjectId(activeProject.id);
+        setTimeLeft(activeProject.defaultTimer || 1500);
+        setTimerRunning(false);
+      }
+    }
+  }, [state.activeProjectId, activeProject]);
 
   if (loading) {
     return (
       <div style={{
-        fontFamily: 'system-ui,sans-serif',
-        background: C.bg,
-        minHeight: '100vh',
-        maxWidth: 480,
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: C.text,
-        padding: 24,
-        boxSizing: 'border-box'
+        fontFamily: 'inherit', background: C.bg, minHeight: '100vh',
+        maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', color: C.text, padding: 24, boxSizing: 'border-box'
       }}>
-        <div style={{
-          position: 'relative',
-          width: 80,
-          height: 80,
-          marginBottom: 24,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <div style={{ position: 'relative', width: 70, height: 70, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', width: '100%', height: '100%', border: `2.5px solid #222`, borderRadius: '50%' }} />
           <div style={{
-            position: 'absolute',
-            width: '100%',
-            height: '100%',
-            border: `3px solid ${C.bgSub}`,
-            borderRadius: '50%'
+            position: 'absolute', width: '100%', height: '100%', border: `2.5px solid transparent`,
+            borderTopColor: C.accent, borderRadius: '50%', animation: 'spin 0.8s linear infinite'
           }} />
-          <div style={{
-            position: 'absolute',
-            width: '100%',
-            height: '100%',
-            border: `3px solid transparent`,
-            borderTopColor: C.gold,
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <span style={{ fontSize: 24 }}>⚔️</span>
+          <span style={{ fontSize: 22 }}>⚡</span>
         </div>
-        <div style={{
-          fontSize: 10,
-          fontFamily: 'monospace',
-          color: C.gold,
-          letterSpacing: '0.25em',
-          textTransform: 'uppercase',
-          marginBottom: 8,
-          textAlign: 'center'
-        }}>
-          Sincronizando
-        </div>
-        <div style={{
-          fontSize: 16,
-          fontFamily: 'Georgia,serif',
-          color: C.text,
-          textAlign: 'center'
-        }}>
-          Comando Central
-        </div>
+        <div style={{ fontSize: 9, fontFamily: 'monospace', color: C.accent, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Sincronizando</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.textMuted }}>Comando Central</div>
         <style>{`
           @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -1431,160 +2334,244 @@ export default function App(){
     );
   }
 
-  return <div style={{fontFamily:'system-ui,sans-serif',background:C.bg,minHeight:'100vh',
-    maxWidth: 480,margin:'0 auto',display:'flex',flexDirection:'column',color:C.text,position:'relative'}}>
-    <style>{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{display:none}`}</style>
-    <Toast msg={toastMsg}/>
-
-    {!isSupabaseConfigured && (
+  return (
+    <ErrorBoundary>
       <div style={{
-        background: 'rgba(245,158,11,0.08)',
-        borderBottom: `1.5px solid rgba(245,158,11,0.2)`,
-        padding: '10px 16px',
-        fontSize: 11,
-        fontFamily: 'monospace',
-        color: C.yellow,
-        textAlign: 'center',
-        letterSpacing: '0.04em',
-        lineHeight: 1.4,
-        zIndex: 300
+        background: C.bg, minHeight: '100vh', maxWidth: 480, margin: '0 auto',
+        display: 'flex', flexDirection: 'column', color: C.text, position: 'relative'
       }}>
-        ⚠️ <b>MODO OFFLINE (LOCAL):</b> Configure as variáveis do Supabase no Netlify para ativar a nuvem.
-      </div>
-    )}
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { display: none; }
+        .two-col-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          width: 100%;
+        }
+        .full-width-col {
+          width: 100%;
+        }
+        input::placeholder, textarea::placeholder {
+          color: #555866;
+        }
+        @keyframes expandLine {
+          from { left: 50%; right: 50%; }
+          to { left: 0; right: 0; }
+        }
+        @keyframes blinking {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
 
-    {/* HEADER */}
-    <div style={{
-      position:'sticky',
-      top:0,
-      zIndex:200,
-      background:C.bg,
-      borderBottom:`1px solid ${C.border}`,
-      padding:'12px 20px',
-      display:'flex',
-      justifyContent:'space-between',
-      alignItems:'center'
-    }}>
-      <div>
-        <div style={{fontSize:9,fontFamily:'monospace',color:C.gold,letterSpacing:'0.25em',marginBottom:2}}>COMANDO CENTRAL</div>
-        <div style={{fontSize:16,fontFamily:'Georgia,serif',color:C.text}}>{ti.icon} {ti.l} — {dateDisplay()}</div>
-      </div>
-      
-      {/* Barra de Status Dinâmica e Manual */}
-      <div style={{display:'flex',gap:6,alignItems:'center'}}>
-        {[
-          { label: 'MISSÃO', active: state.flags.missao, char: '🎯' },
-          { label: 'AÇÃO', active: state.flags.acao, char: '⚔️' },
-          { label: 'FUGA', active: state.flags.fuga, char: '🔍' },
-          { label: 'REFLEXÃO', active: state.flags.eus, char: '📜' }
-        ].map(item => (
-          <div
-            key={item.label}
-            title={item.label}
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: '50%',
-              background: item.active ? 'rgba(34,197,94,0.15)' : C.bgSub,
-              border: `1px solid ${item.active ? C.green : C.border}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 11,
-              filter: item.active ? 'none' : 'grayscale(100%) opacity(40%)',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            {item.char}
+      <Toast toastObj={toastMsg} onClose={() => setToastMsg(null)} activeColor={pColor} />
+
+      {/* BREATHING & CORRECTION MODALS */}
+      {state.opState === 'respirar_90' && (
+        <ActionBreathing duration={90}
+          onComplete={() => { setState(s => ({ ...s, opState: null })); setTimerRunning(true); }}
+          onClose={() => setState(s => ({ ...s, opState: null }))}
+          title="🫁 RESPIRAR E RETOMAR FOCO"
+          subtitle="Inspire em 4s, segure por 4s, expire em 4s. Acalme o sistema nervoso para prosseguir."
+          activeColor={pColor} />
+      )}
+
+      {state.opState === 'fuga_90' && (() => {
+        const FUGAS = [
+          { id: 'infinito', label: 'Planejamento Infinito', acao: 'A clareza vem da prática. Execute 5 minutos agora.' },
+          { id: 'perfeccionismo', label: 'Perfeccionismo', acao: 'O feito é melhor que o perfeito. Conclua uma versão simplificada imediatamente.' },
+          { id: 'distracao', label: 'Distração / Rede Social', acao: 'Feche todas as abas extras e foque no próximo passo simples.' }
+        ];
+        const f = FUGAS.find(x => x.id === state.fugaTipo);
+        return (
+          <ActionBreathing duration={90}
+            onComplete={() => setState(s => ({ ...s, opState: null, fugaTipo: null }))}
+            onClose={() => setState(s => ({ ...s, opState: null, fugaTipo: null }))}
+            title="⚡ ANTÍDOTO DE DESVIO ACIONADO"
+            subtitle={`Correção: ${f ? f.acao : ''}`}
+            activeColor={pColor} />
+        );
+      })()}
+
+      {/* HEADER FIXO */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 300, background: C.bg,
+        borderBottom: `1px solid ${C.border}`, padding: '0 20px', height: 56,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+      }}>
+        {activeProject ? (
+          <button onClick={() => setState(s => ({ ...s, activeProjectId: null }))} style={{
+            background: 'none', border: 'none', color: pColor, fontSize: 11, fontWeight: 'bold', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'monospace'
+          }}>
+            ← VOLTAR
+          </button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 16, color: C.accent }}>⚡</span>
+            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.1em', color: C.text }}>COMANDO CENTRAL</span>
           </div>
-        ))}
-        
-        <button
-          onClick={() => setShowHelp(true)}
-          style={{
-            background: 'transparent',
-            border: `1.2px solid ${C.gold}`,
-            color: C.gold,
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 11,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: 'monospace',
-            marginLeft: 4,
-            transition: 'all 0.15s'
-          }}
-          onMouseEnter={e => e.target.style.background = 'rgba(201,169,106,0.1)'}
-          onMouseLeave={e => e.target.style.background = 'transparent'}
-        >
-          ?
+        )}
+
+        {/* Global main tabs when activeProject is null */}
+        {!activeProject && (
+          <div style={{ display: 'flex', height: '100%' }}>
+            {[
+              { id: 'dashboard', icon: '📂', l: 'PROJETOS' },
+              { id: 'cronograma', icon: '📋', l: 'CRONOGRAMA' }
+            ].map(t => {
+              const active = mainTab === t.id;
+              return (
+                <button key={t.id} onClick={() => setMainTab(t.id)} style={{
+                  background: 'none', border: 'none', height: '100%', padding: '0 12px',
+                  display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative',
+                  color: active ? C.text : C.textMuted, fontSize: 10, fontWeight: active ? 700 : 500,
+                  transition: 'color 0.15s ease'
+                }}>
+                  <span>{t.l}</span>
+                  {active && (
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0, height: 2,
+                      background: C.accent, animation: 'expandLine 0.2s ease-out'
+                    }} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Dynamic Project Tabs */}
+        {activeProject && (
+          <div style={{ display: 'flex', height: '100%' }}>
+            {[
+              { id: 'hoje', icon: '⚡', l: 'HOJE' },
+              { id: 'roadmap', icon: '📍', l: 'ROADMAP' },
+              { id: 'evolucao', icon: '📈', l: 'EVOLUÇÃO' },
+              { id: 'anotacoes', icon: '📝', l: 'NOTAS' }
+            ].map(t => {
+              const active = projectTab === t.id;
+              return (
+                <button key={t.id} onClick={() => setProjectTab(t.id)} style={{
+                  background: 'none', border: 'none', height: '100%', padding: '0 8px',
+                  display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative',
+                  color: active ? C.text : C.textMuted, fontSize: 10, fontWeight: active ? 700 : 500,
+                  transition: 'color 0.15s ease'
+                }}>
+                  <span>{t.l}</span>
+                  {active && (
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0, height: 2,
+                      background: pColor, animation: 'expandLine 0.2s ease-out'
+                    }} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Indicators in the header (hidden when activeProject has active tabs to avoid overlap) */}
+        {!activeProject && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {[
+              { label: 'MISSÃO', active: (state.missions || []).some(m => m.created_at?.startsWith(todayStr)), char: '🎯' },
+              { label: 'AÇÃO', active: (state.missions || []).some(m => m.status === 'done' && m.completed_at?.startsWith(todayStr)), char: '⚔️' },
+              { label: 'FUGA', active: state.fixedEscapes && state.fixedEscapes.length > 0, char: '🔍' },
+              { label: 'REFLEXÃO', active: state.eusSaved, char: '📜' }
+            ].map(item => (
+              <div
+                key={item.label}
+                title={item.label}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  background: item.active ? 'rgba(16,185,129,0.15)' : '#1F2937',
+                  border: `1px solid ${item.active ? '#10B981' : '#374151'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 11
+                }}
+              >
+                {item.char}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={() => {
+          if (activeProject) {
+            setProjectTab('configurar');
+          } else {
+            setShowSettings(!showSettings);
+          }
+        }} style={{
+          background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 15
+        }}>
+          ⚙️
         </button>
       </div>
-    </div>
 
-    {/* MODAL MANUAL DO GUERREIRO */}
-    {showHelp && (
-      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',display:'flex',
-        alignItems:'center',justifyContent:'center',zIndex:500,padding:24}} onClick={()=>setShowHelp(false)}>
-        <div onClick={e=>e.stopPropagation()} style={{background:C.bgCard,borderRadius:20,
-          padding:24,width:'100%',maxWidth:400,border:`1.5px solid ${C.gold}`,boxShadow:'0 10px 25px rgba(0,0,0,0.5)'}}>
-          <Label text="📜 MANUAL DO GUERREIRO" color={C.gold}/>
-          <div style={{fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'monospace',maxHeight:'55vh',overflowY:'auto',paddingRight:6,marginBottom:20}}>
-            <p style={{marginBottom:12}}>Bem-vindo ao <b>Comando Central</b>. Este aplicativo foi desenhado para proteger sua mente contra a procrastinação e direcionar sua energia para a execução diária.</p>
-            
-            <p style={{fontWeight:700,color:C.gold,marginTop:16,marginBottom:6}}>⚡ FLUXO DIÁRIO DO GUERREIRO:</p>
-            <ol style={{paddingLeft:16,marginBottom:12}}>
-              <li style={{marginBottom:8}}><b>Defina sua Missão:</b> Estabeleça a prioridade máxima do dia e a prova palpável de que a concluiu. Associe-a a uma área da vida.</li>
-              <li style={{marginBottom:8}}><b>Execute:</b> Use o timer da Ação do Guerreiro de 25 minutos para se focar 100% sem distrações.</li>
-              <li style={{marginBottom:8}}><b>Confronte Fugas:</b> Se sentir vontade de planejar demais, abra o Detector de Fugas, selecione o problema e injete a ação corretiva diretamente no timer.</li>
-              <li style={{marginBottom:8}}><b>Seja Resiliente:</b> Se travar, clique em "TRAVADO" para respirar por 90s. Se estiver exausto, clique em "CANSAÇO" para fazer a menor ação viável do dia ("Não Zerar").</li>
-            </ol>
-
-            <p style={{fontWeight:700,color:C.gold,marginTop:16,marginBottom:6}}>📈 EVOLUÇÃO E IDENTIDADE:</p>
-            <ul style={{paddingLeft:16,marginBottom:12}}>
-              <li style={{marginBottom:8}}><b>Os 3 Eus:</b> Escreva suas reflexões diárias para moldar sua identidade.</li>
-              <li style={{marginBottom:8}}><b>Histórico de Batalhas:</b> Veja sua consistência dos últimos 30 dias na aba de Evolução.</li>
-            </ul>
+      {/* SYSTEM SETTINGS MODAL */}
+      {showSettings && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 24
+        }} onClick={() => setShowSettings(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: C.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 400,
+            border: `1.5px solid ${C.border}`, boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}>
+            <Label text="⚙️ CONFIGURAÇÕES DO SISTEMA" color={C.accent} />
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: C.text, fontFamily: 'monospace', maxHeight: '50vh', overflowY: 'auto', paddingRight: 6, marginBottom: 20 }}>
+              <p style={{ marginBottom: 12 }}><b>Comando Central Multi-Projeto</b></p>
+              <p style={{ fontWeight: 700, color: C.accent, marginTop: 16, marginBottom: 6 }}>Informações Gerais:</p>
+              <ul style={{ paddingLeft: 16, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <li>Status Supabase: <b style={{ color: isSupabaseConfigured ? C.success : C.warning }}>{isSupabaseConfigured ? 'Conectado' : 'Offline (Local)'}</b></li>
+                <li>Projetos Criados: <b style={{ color: C.accent }}>{(state.projects || []).length}</b></li>
+                <li>Missões Totais: <b>{(state.missions || []).length}</b></li>
+                <li>Streak Atual: <b style={{ color: C.accent }}>{state.streak} dias</b></li>
+              </ul>
+            </div>
+            <Btn label="VOLTAR" full onClick={() => setShowSettings(false)} />
           </div>
-          <Btn label="ENTENDIDO, AO TRABALHO! ⚔️" full onClick={()=>setShowHelp(false)}/>
         </div>
+      )}
+
+      {/* VIEW DE ROTEAMENTO (BODY) */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {!activeProject ? (
+          mainTab === 'dashboard' ? (
+            <DashboardMain state={state} setState={setState} triggerToast={triggerToast} score={score} classObj={classObj} />
+          ) : (
+            <TabCronograma state={state} setState={setState} toast={triggerToast} />
+          )
+        ) : (
+          <div>
+            {projectTab === 'hoje' && (
+              <ProjectHoje state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast}
+                timeLeft={timeLeft} setTimeLeft={setTimeLeft} timerRunning={timerRunning} setTimerRunning={setTimerRunning} formatTime={formatTime} />
+            )}
+            {projectTab === 'roadmap' && (
+              <ProjectRoadmap state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast} />
+            )}
+            {projectTab === 'evolucao' && (
+              <ProjectEvolucao state={state} activeProject={activeProject} triggerToast={triggerToast} />
+            )}
+            {projectTab === 'anotacoes' && (
+              <ProjectAnotacoes state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast} />
+            )}
+            {projectTab === 'configurar' && (
+              <ProjectConfig state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast} />
+            )}
+          </div>
+        )}
       </div>
-    )}
 
-    {/* CONTENT */}
-    <div style={{flex:1,overflowY:'auto'}}>
-      {tab==='hoje'&&<TabHoje state={state} setState={setState} toast={toast}/>}
-      {tab==='identidade'&&<TabIdentidade state={state} setState={setState} toast={toast}/>}
-      {tab==='evolucao'&&(() => {
-        const combinedHistory = [
-          { date: getLocalDateString(), state: state },
-          ...history.filter(h => h.date !== getLocalDateString())
-        ];
-        return <TabEvolucao 
-          state={state} 
-          setState={setState} 
-          toast={toast} 
-          history={combinedHistory} 
-          getPast30Days={getPast30Days} 
-          getLocalDateString={getLocalDateString}
-        />;
-      })()}
-      {tab==='cronograma'&&<TabCronograma state={state} setState={setState} toast={toast}/>}
-    </div>
-
-    {/* NAV */}
-    <div style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:480,
-      background:C.bg,borderTop:`1px solid ${C.border}`,display:'flex',padding:'8px 0 20px',zIndex:100}}>
-      {tabs.map(t=>{const a=tab===t.id;return <button key={t.id} onClick={()=>changeTab(t.id)}
-        style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',padding:'8px 4px'}}>
-        <span style={{fontSize:a?22:18}}>{t.icon}</span>
-        <span style={{fontSize:9,fontFamily:'monospace',fontWeight:700,letterSpacing:'0.05em',color:a?C.gold:C.textSub}}>{t.l}</span>
-        {a&&<div style={{width:20,height:2,background:C.gold,borderRadius:1,marginTop:2}}/>}
-      </button>;})}
-    </div>
-  </div>;
+      </div>
+    </ErrorBoundary>
+  );
 }
