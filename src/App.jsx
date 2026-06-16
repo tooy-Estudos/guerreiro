@@ -137,18 +137,35 @@ const CRONOGRAMA_PILARES = [
 
 const CRONOGRAMA_DIAS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
 const CRONOGRAMA_BLOCOS = [
-  { hora: '05:40', pilar: 'saude', titulo: 'ACORDAR + ÁGUA', detalhe: 'Levantar sem negociar. Hidratar e preparar o corpo.', dias: [0,1,2,3,4,5,6] },
-  { hora: '06:00', pilar: 'saude', titulo: 'TREINO / CARDIO', detalhe: 'Academia cedo: força, massa e definição.', dias: [0,1,2,3,4] },
-  { hora: '07:10', pilar: 'alma', titulo: 'ORAÇÃO + DEVOCIONAL', detalhe: 'Direção antes da pressão do dia.', dias: [0,1,2,3,4,5,6] },
-  { hora: '08:00', pilar: 'trabalho', titulo: 'MAIS SAÚDE', detalhe: 'Licitações, fornecedores e pendências críticas.', dias: [0,1,2,3,4] },
-  { hora: '10:00', pilar: 'trabalho', titulo: 'COMPRASOPS / SISTEMAS', detalhe: 'Construir automações e produtos.', dias: [0,1,2,3,4] },
-  { hora: '12:00', pilar: 'saude', titulo: 'ALMOÇO LIMPO', detalhe: 'Proteína, comida de verdade, sem bagunçar energia.', dias: [0,1,2,3,4,5,6] },
-  { hora: '14:00', pilar: 'mente', titulo: 'ADS / PROGRAMAÇÃO', detalhe: 'Faculdade, código, redes e lógica.', dias: [0,1,2,3,4] },
-  { hora: '16:00', pilar: 'mente', titulo: 'OAB / LEITURA', detalhe: 'Questões, revisão ou leitura estratégica.', dias: [0,1,2,3,4] },
-  { hora: '18:00', pilar: 'alma', titulo: 'IGREJA / FAMÍLIA', detalhe: 'Presença, serviço e relacionamento.', dias: [2,5,6] },
-  { hora: '20:00', pilar: 'trabalho', titulo: 'REVISÃO DO DIA', detalhe: 'Fechar pendências, planejar amanhã e registrar vitórias.', dias: [0,1,2,3,4,6] },
-  { hora: '22:30', pilar: 'saude', titulo: 'DESACELERAR', detalhe: 'Tela baixa, preparar sono e proteger o amanhã.', dias: [0,1,2,3,4,5,6] },
+  { hora: '05:40', pilar: 'saude', titulo: 'ACORDAR + ÁGUA', detalhe: 'Levantar sem negociar. Hidratar e preparar o corpo.', dias: [0,1,2,3,4,5,6], peso: 25 },
+  { hora: '06:00', pilar: 'saude', titulo: 'TREINO / CARDIO', detalhe: 'Academia cedo: força, massa e definição.', dias: [0,1,2,3,4], peso: 50 },
+  { hora: '07:10', pilar: 'alma', titulo: 'ORAÇÃO + DEVOCIONAL', detalhe: 'Direção antes da pressão do dia.', dias: [0,1,2,3,4,5,6], peso: 100 },
+  { hora: '08:00', pilar: 'trabalho', titulo: 'MAIS SAÚDE', detalhe: 'Licitações, fornecedores e pendências críticas.', dias: [0,1,2,3,4], peso: 100 },
+  { hora: '10:00', pilar: 'trabalho', titulo: 'PRODUZIR / SISTEMAS', detalhe: 'ComprasOps, automações e conteúdo para autoridade.', dias: [0,1,2,3,4], peso: 100 },
+  { hora: '12:00', pilar: 'saude', titulo: 'ALMOÇO LIMPO', detalhe: 'Proteína, comida de verdade, sem bagunçar energia.', dias: [0,1,2,3,4,5,6], peso: 25 },
+  { hora: '14:00', pilar: 'mente', titulo: 'ADS / PROGRAMAÇÃO', detalhe: 'Faculdade, código, redes e lógica.', dias: [0,1,2,3,4], peso: 100 },
+  { hora: '16:00', pilar: 'mente', titulo: 'OAB / LEITURA', detalhe: 'Questões, revisão ou leitura estratégica.', dias: [0,1,2,3,4], peso: 100 },
+  { hora: '18:00', pilar: 'alma', titulo: 'IGREJA / FAMÍLIA', detalhe: 'Presença, serviço e relacionamento.', dias: [2,5,6], peso: 100 },
+  { hora: '20:00', pilar: 'trabalho', titulo: 'REVISÃO DO DIA', detalhe: 'Fechar pendências, planejar amanhã e registrar vitórias.', dias: [0,1,2,3,4,6], peso: 50 },
+  { hora: '22:30', pilar: 'saude', titulo: 'DESACELERAR', detalhe: 'Tela baixa, preparar sono e proteger o amanhã.', dias: [0,1,2,3,4,5,6], peso: 25 },
 ];
+
+const COMANDO_PILARES = [
+  { id: 'saude', nome: 'CORPO', icon: '💪', cor: '#10B981', desc: 'Energia física, treino, sono e performance.', aliases: ['saude', 'corpo'], skillTree: [['Treinar', 50], ['Academia', 50], ['Correr', 25], ['Futebol', 25]] },
+  { id: 'mente', nome: 'MENTE', icon: '🧠', cor: '#00D4FF', desc: 'Estudo, ADS, OAB, leitura e raciocínio.', aliases: ['mente', 'estudo'], skillTree: [['Estudar', 100], ['Resolver', 100], ['Ler', 50], ['Vídeo', 50]] },
+  { id: 'alma', nome: 'ALMA', icon: '✝️', cor: '#A855F7', desc: 'Fé, família, propósito e identidade.', aliases: ['alma', 'fe', 'familia'], skillTree: [['Orar', 100], ['Devocional', 50], ['Igreja', 100], ['Família', 50]] },
+  { id: 'trabalho', nome: 'TRABALHO', icon: '💼', cor: '#F59E0B', desc: 'Negócios, Mais Saúde, produção e autoridade.', aliases: ['trabalho', 'carreira'], skillTree: [['Produzir', 100], ['Mais Saúde', 100], ['ComprasOps', 100], ['Shorts/Reels/TikTok', 50]] },
+];
+
+const COMANDO_FLUXO = [
+  ['DEFINIR MISSÃO', 'Escolha o projeto e a ramificação crítica do dia.'],
+  ['EXECUTAR AÇÃO', 'Use foco profundo, timer e bloco no cronograma.'],
+  ['LIDAR COM FUGAS', 'Se desviou, aplique um antídoto e volte.'],
+  ['REFLETIR', 'Registre prova, aprendizado e ajuste de rota.'],
+  ['EVOLUIR', 'Marque progresso e proteja a sequência.'],
+];
+
+const ANTIDOTOS_COMPORTAMENTAIS = ['Planejamento infinito', 'Perfeccionismo', 'Distração / rede social', 'Procrastinação', 'Medo de errar', 'Excesso de pesquisa'];
 
 function classificarDia(score) {
   if (score <= 3) return { label: "DIA FRACO", color: C.critical };
@@ -348,6 +365,94 @@ function SpotlightCard({ children, style = {}, className = "" }) {
   );
 }
 
+function ComandoCentralOverview({ state, score }) {
+  const projects = state.projects || [];
+  const missions = state.missions || [];
+  const scheduleItems = state.cronograma?.items || [];
+  const checked = state.cronograma?.weeklyChecked || {};
+  const totalSchedule = scheduleItems.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
+  const doneSchedule = Object.values(checked).filter(Boolean).length;
+  const schedulePct = totalSchedule ? Math.round((doneSchedule / totalSchedule) * 100) : Math.min(Math.round((score / 10) * 100), 100);
+  const pillarStats = COMANDO_PILARES.map(pilar => {
+    const pilarProjects = projects.filter(p => p.pilar === pilar.id || pilar.aliases.includes(p.area) || pilar.aliases.includes(p.objective?.toLowerCase?.() || ''));
+    const pilarSchedule = scheduleItems.filter(i => i.pilar === pilar.id || pilarProjects.some(p => p.id === i.projectId));
+    const total = pilarSchedule.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
+    const done = pilarSchedule.reduce((acc, item) => acc + (item.dias || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+    const weightedTotal = pilarSchedule.reduce((acc, item) => acc + ((item.dias?.length || 0) * (item.peso || 50)), 0);
+    const weightedDone = pilarSchedule.reduce((acc, item) => acc + (item.dias || []).filter(d => checked[`${item.id}-${d}`]).length * (item.peso || 50), 0);
+    const roadmap = pilarProjects.flatMap(p => p.roadmap || []);
+    const roadmapDone = roadmap.filter(r => r.status === 'completed').length;
+    const pct = weightedTotal ? Math.round((weightedDone / weightedTotal) * 100) : roadmap.length ? Math.round((roadmapDone / roadmap.length) * 100) : 0;
+    return { ...pilar, projects: pilarProjects, pct, total, done, weightedTotal, weightedDone, roadmap, roadmapDone };
+  });
+  const completedMissions = missions.filter(m => m.status === 'done').length;
+  const avg = pillarStats.length ? Math.round(pillarStats.reduce((s, p) => s + p.pct, 0) / pillarStats.length) : schedulePct;
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px minmax(0,1fr) 260px', gap: 14 }} className="command-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <SpotlightCard color={C.gold}>
+            <Label text="ARQUITETURA DO SISTEMA" color={C.gold} />
+            <p style={{ color: C.textMuted, fontSize: 12, lineHeight: 1.5, marginTop: 0 }}>Fluxo geral do Comando Central: pilares → projetos → ramificações → cronograma → métricas.</p>
+            {['Núcleo do Sistema', 'Pilares Principais', 'Projetos / Ramificações', 'Missões e Provas', 'Métricas / Progresso'].map((x, i) => <div key={x} style={{ display:'flex', alignItems:'center', gap:8, color:C.text, fontSize:12, marginTop:8 }}><span style={{ color:C.gold }}>0{i+1}</span>{x}</div>)}
+          </SpotlightCard>
+          <SpotlightCard color={C.gold}>
+            <Label text="FLUXO DIÁRIO" color={C.gold} />
+            {COMANDO_FLUXO.map(([title, desc], i) => <div key={title} style={{ display:'grid', gridTemplateColumns:'26px 1fr', gap:8, marginBottom:10 }}><div style={{ width:22, height:22, borderRadius:'50%', background:`${C.gold}22`, border:`1px solid ${C.gold}`, color:C.gold, display:'grid', placeItems:'center', fontSize:10, fontWeight:800 }}>{i+1}</div><div><div style={{ color:C.text, fontSize:11, fontWeight:800 }}>{title}</div><div style={{ color:C.textMuted, fontSize:10, lineHeight:1.35 }}>{desc}</div></div></div>)}
+          </SpotlightCard>
+          <SpotlightCard color={C.gold}>
+            <Label text="REGRAS DO JOGO" color={C.gold} />
+            {['EXECUÇÃO > PERFEIÇÃO', 'CONSISTÊNCIA > MOTIVAÇÃO', 'DISCIPLINA > TALENTO'].map(r => <div key={r} style={{ color:C.text, fontSize:11, fontWeight:800, padding:'7px 0', borderBottom:`1px solid ${C.border}` }}>{r}</div>)}
+          </SpotlightCard>
+        </div>
+
+        <div>
+          <SpotlightCard color={C.gold}>
+            <div style={{ textAlign:'center', marginBottom:16 }}>
+              <div style={{ fontSize:10, color:C.gold, letterSpacing:'.35em', fontFamily:'monospace' }}>⚡ COMANDO CENTRAL</div>
+              <div style={{ fontSize:26, color:C.text, fontWeight:900, marginTop:4 }}>SISTEMA OPERACIONAL DA SUA VIDA</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:14 }}>
+                {['MISSÃO', 'AÇÃO', 'FUGA', 'REFLEXÃO'].map(x => <div key={x} style={{ border:`1px solid ${C.border}`, background:C.bg, borderRadius:10, padding:10, color:C.text, fontSize:11, fontWeight:800 }}>{x}</div>)}
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0,1fr))', gap:12 }} className="pillar-grid">
+              {pillarStats.map(p => <div key={p.id} style={{ background:C.bg, border:`1px solid ${p.cor}55`, borderRadius:14, padding:14, minHeight:250, boxShadow:`0 0 24px ${p.cor}12` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}><span style={{ fontSize:22 }}>{p.icon}</span><div><div style={{ color:p.cor, fontSize:15, fontWeight:900 }}>{p.nome}</div><div style={{ color:C.textMuted, fontSize:10 }}>{p.desc}</div></div></div>
+                <div style={{ display:'flex', justifyContent:'space-between', color:C.textMuted, fontSize:10, margin:'10px 0 4px' }}><span>EVOLUÇÃO</span><b style={{ color:p.cor }}>{p.pct}%</b></div>
+                <div style={{ height:6, background:'#222', borderRadius:10, overflow:'hidden', marginBottom:12 }}><div style={{ width:`${p.pct}%`, height:'100%', background:p.cor }} /></div>
+                <div style={{ color:C.text, fontSize:11, fontWeight:800, marginBottom:6 }}>ÁRVORE DE HABILIDADES</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:10 }}>
+                  {p.skillTree.map(([skill, peso]) => <div key={skill} style={{ border:`1px solid ${p.cor}33`, borderRadius:8, padding:'6px 7px', background:`${p.cor}0f` }}><div style={{ color:C.text, fontSize:10, fontWeight:800 }}>{skill}</div><div style={{ color:p.cor, fontSize:9, fontWeight:900 }}>{peso}% XP</div></div>)}
+                </div>
+                <div style={{ color:C.text, fontSize:11, fontWeight:800, marginBottom:6 }}>RAMIFICAÇÕES</div>
+                {(p.projects.length ? p.projects.slice(0,3) : [{ name: 'Criar projeto nesta aba', roadmap: [] }]).map(proj => <div key={proj.id || proj.name} style={{ borderLeft:`2px solid ${p.cor}`, paddingLeft:8, marginBottom:8 }}><div style={{ color:C.text, fontSize:11, fontWeight:700 }}>{proj.emoji || '•'} {proj.name}</div><div style={{ color:C.textMuted, fontSize:10 }}>{(proj.roadmap || []).slice(0,2).map(r => r.title || r.text || r).join(' • ') || 'Sem etapas definidas'}</div></div>)}
+                <div style={{ marginTop:10, padding:8, border:`1px solid ${p.cor}33`, borderRadius:10, background:`${p.cor}10` }}><div style={{ color:p.cor, fontSize:10, fontWeight:900 }}>XP DO DIA</div><div style={{ color:C.textMuted, fontSize:10 }}>{p.weightedDone}/{p.weightedTotal || 100} XP ponderado · {p.done}/{p.total || p.roadmap.length || 1} ações</div></div>
+              </div>)}
+            </div>
+          </SpotlightCard>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <SpotlightCard color={C.gold}>
+            <Label text="EVOLUÇÃO GERAL" color={C.gold} />
+            <div style={{ width:122, height:122, borderRadius:'50%', margin:'0 auto 12px', background:`conic-gradient(${C.gold} ${avg * 3.6}deg, #222 0deg)`, display:'grid', placeItems:'center' }}><div style={{ width:88, height:88, borderRadius:'50%', background:C.surface, display:'grid', placeItems:'center', color:C.gold, fontSize:24, fontWeight:900 }}>{avg}%</div></div>
+            {pillarStats.map(p => <div key={p.id} style={{ marginBottom:8 }}><div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:C.textMuted }}><span>{p.nome}</span><b style={{ color:p.cor }}>{p.pct}%</b></div><div style={{ height:4, background:'#222', borderRadius:10 }}><div style={{ width:`${p.pct}%`, height:'100%', background:p.cor, borderRadius:10 }} /></div></div>)}
+          </SpotlightCard>
+          <SpotlightCard color={C.accent}>
+            <Label text="ANTÍDOTOS COMPORTAMENTAIS" color={C.accent} />
+            {ANTIDOTOS_COMPORTAMENTAIS.map(a => <div key={a} style={{ display:'flex', justifyContent:'space-between', color:C.text, fontSize:11, padding:'7px 0', borderBottom:`1px solid ${C.border}` }}><span>{a}</span><b style={{ color:C.success }}>+2</b></div>)}
+          </SpotlightCard>
+          <SpotlightCard color={C.gold}>
+            <Label text="MÉTRICAS PRINCIPAIS" color={C.gold} />
+            {[['Missões concluídas', completedMissions], ['Projetos ativos', projects.length], ['Blocos no cronograma', totalSchedule], ['Sequência atual', `${state.streak || 0} dias`], ['Score semanal', `${avg}%`]].map(([k,v]) => <div key={k} style={{ display:'flex', justifyContent:'space-between', color:C.text, fontSize:11, marginBottom:7 }}><span>{k}</span><b style={{ color:C.gold }}>{v}</b></div>)}
+          </SpotlightCard>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD PRINCIPAL ───
 function DashboardMain({ state, setState, triggerToast, score, classObj }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -435,6 +540,9 @@ function DashboardMain({ state, setState, triggerToast, score, classObj }) {
 
   return (
     <div className="two-col-grid" style={{ padding: '20px 16px 100px' }}>
+      <div className="full-width-col">
+        <ComandoCentralOverview state={state} score={score} />
+      </div>
       
       {/* SEÇÃO METAS GERAIS DO DIA */}
       <div className="full-width-col">
@@ -2447,7 +2555,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div style={{
-        background: C.bg, minHeight: '100vh', maxWidth: 480, margin: '0 auto',
+        background: C.bg, minHeight: '100vh', maxWidth: 1280, margin: '0 auto',
         display: 'flex', flexDirection: 'column', color: C.text, position: 'relative'
       }}>
       <style>{`
@@ -2461,6 +2569,22 @@ export default function App() {
         }
         .full-width-col {
           width: 100%;
+        }
+        .command-grid {
+          align-items: start;
+        }
+        @media (max-width: 1180px) {
+          .command-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .pillar-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (max-width: 680px) {
+          .pillar-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
         input::placeholder, textarea::placeholder {
           color: #555866;
