@@ -43,6 +43,49 @@ const PANEL_AREAS = [
   {key:'empresa',label:'Empresa',icon:'💼',micro:'Resolver uma pendência crítica.'},
 ];
 
+const CRONOGRAMA_PILARES = [
+  {
+    id: 'mente', icon: '🧠', label: 'MENTE', cor: '#818CF8',
+    descricao: 'Fortaleça sua capacidade intelectual.',
+    atividades: [
+      { id: 'mente-0', label: 'Estudar OAB (questões)', micro: 'Resolver pelo menos 10 questões.' },
+      { id: 'mente-1', label: 'Estudar ADS (faculdade)', micro: 'Revisar matéria ou fazer atividade.' },
+      { id: 'mente-2', label: 'Leitura / estudo livre', micro: 'Ler pelo menos 10 páginas.' },
+      { id: 'mente-3', label: 'Resolver problemas / lógica', micro: 'Exercitar raciocínio por 15 min.' },
+    ]
+  },
+  {
+    id: 'alma', icon: '✝️', label: 'ALMA', cor: '#C9A96A',
+    descricao: 'Cuide da sua conexão espiritual.',
+    atividades: [
+      { id: 'alma-0', label: 'Oração diária', micro: '5 minutos em oração.' },
+      { id: 'alma-1', label: 'Devocional / Bíblia', micro: 'Ler um capítulo e refletir.' },
+      { id: 'alma-2', label: 'Gratidão / reflexão', micro: 'Listar 3 motivos de gratidão.' },
+      { id: 'alma-3', label: 'Servir alguém hoje', micro: 'Ajudar uma pessoa de forma intencional.' },
+    ]
+  },
+  {
+    id: 'trabalho', icon: '💼', label: 'TRABALHO', cor: '#F59E0B',
+    descricao: 'Execute com excelência profissional.',
+    atividades: [
+      { id: 'trabalho-0', label: 'Mais Saúde — tarefa principal', micro: 'Resolver pendência ou avançar projeto.' },
+      { id: 'trabalho-1', label: 'ComprasOps / projetos', micro: 'Trabalhar no projeto por pelo menos 30 min.' },
+      { id: 'trabalho-2', label: 'Revisar pendências urgentes', micro: 'Checar lista e resolver 1 item.' },
+      { id: 'trabalho-3', label: 'Organizar agenda / planejar', micro: 'Definir prioridades de amanhã.' },
+    ]
+  },
+  {
+    id: 'saude', icon: '❤️', label: 'SAÚDE', cor: '#EF4444',
+    descricao: 'Proteja seu corpo e sua energia.',
+    atividades: [
+      { id: 'saude-0', label: 'Treino / academia', micro: 'Treino de pelo menos 30 minutos.' },
+      { id: 'saude-1', label: 'Alimentação saudável', micro: 'Evitar ultraprocessados hoje.' },
+      { id: 'saude-2', label: 'Hidratação (2L+)', micro: 'Beber pelo menos 2 litros de água.' },
+      { id: 'saude-3', label: 'Sono adequado (7h+)', micro: 'Dormir até 23h e acordar cedo.' },
+    ]
+  }
+];
+
 const scoreColor = s => s<=3?C.red:s<=5?C.yellow:s<=7?C.text:s<=9?C.green:C.gold;
 const scoreLabel = s => s<=3?'DIA FRACO':s<=5?'DIA MÍNIMO':s<=7?'DIA BOM':s<=9?'DIA FORTE':'DIA ELITE';
 const dateDisplay = () => {
@@ -911,6 +954,215 @@ function TabEvolucao({state,setState,toast,history,getPast30Days,getLocalDateStr
   </div>;
 }
 
+// ─── ABA CRONOGRAMA ───
+function TabCronograma({state,setState,toast}){
+  const checked = state.cronograma?.checked || {};
+  const totalAtividades = CRONOGRAMA_PILARES.reduce((s,p)=>s+p.atividades.length,0);
+  const totalDone = CRONOGRAMA_PILARES.reduce((s,p)=>s+p.atividades.filter(a=>checked[a.id]).length,0);
+  const allComplete = totalDone===totalAtividades;
+
+  const [showCelebration,setShowCelebration]=useState(false);
+  const [prevAllComplete,setPrevAllComplete]=useState(false);
+
+  useEffect(()=>{
+    if(allComplete&&!prevAllComplete){
+      setShowCelebration(true);
+      toast('🏆 CRONOGRAMA COMPLETO! Dia de vitória total.');
+      setTimeout(()=>setShowCelebration(false),3000);
+    }
+    setPrevAllComplete(allComplete);
+  },[allComplete]);
+
+  const toggleAtividade=(atividade,pilar)=>{
+    const wasChecked=checked[atividade.id];
+    const newChecked={...checked};
+    if(wasChecked){delete newChecked[atividade.id];}
+    else{newChecked[atividade.id]=true;}
+
+    setState(s=>({...s,cronograma:{...s.cronograma,checked:newChecked}}));
+
+    if(!wasChecked){
+      const pilarDone=pilar.atividades.filter(a=>newChecked[a.id]).length;
+      const pilarTotal=pilar.atividades.length;
+      if(pilarDone===pilarTotal){
+        toast(`${pilar.icon} ${pilar.label} completa! +força espiritual.`);
+      } else {
+        const msgs={
+          mente:'Mente fortalecida. Continue evoluindo.',
+          alma:'Alma reforçada. Mantenha a conexão.',
+          trabalho:'Trabalho avançando. Execute com excelência.',
+          saude:'Saúde protegida. Corpo em movimento.',
+        };
+        toast(`✓ ${atividade.label} concluída. ${msgs[pilar.id]}`);
+      }
+    }
+  };
+
+  return <div style={{padding:'14px 16px 100px'}}>
+    {/* Keyframes */}
+    <style>{`
+      @keyframes cronogramaGlow{
+        0%{box-shadow:0 0 8px rgba(201,169,106,0.2)}
+        50%{box-shadow:0 0 24px rgba(201,169,106,0.5)}
+        100%{box-shadow:0 0 8px rgba(201,169,106,0.2)}
+      }
+      @keyframes cronogramaGoldBorder{
+        0%{border-color:#C9A96A}
+        50%{border-color:#F59E0B}
+        100%{border-color:#C9A96A}
+      }
+      @keyframes checkPop{
+        0%{transform:scale(0.8)}
+        50%{transform:scale(1.2)}
+        100%{transform:scale(1)}
+      }
+    `}</style>
+
+    {/* Celebration overlay */}
+    {showCelebration&&<div style={{position:'fixed',inset:0,background:'rgba(11,11,15,0.9)',display:'flex',
+      flexDirection:'column',alignItems:'center',justifyContent:'center',zIndex:500,padding:32}}>
+      <div style={{fontSize:72,marginBottom:16,animation:'checkPop 0.5s ease'}}>🏆</div>
+      <div style={{fontSize:24,fontFamily:'Georgia,serif',color:C.gold,textAlign:'center',marginBottom:8}}>DIA DE VITÓRIA TOTAL</div>
+      <div style={{fontSize:13,color:C.textSub,fontFamily:'monospace',textAlign:'center'}}>16/16 atividades concluídas. Você é imparável.</div>
+    </div>}
+
+    {/* Header com progresso geral */}
+    <SpotlightCard style={{
+      background:'linear-gradient(135deg,#101828,#0D1F35)',
+      border:`1.5px solid ${allComplete?C.gold:C.border}`,
+      borderRadius:16,padding:'14px 16px',marginBottom:16,
+      animation:allComplete?'cronogramaGoldBorder 2s ease infinite':'none'
+    }}>
+      <Label text="📋 CRONOGRAMA DO GUERREIRO" color={C.gold}/>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+        <div style={{fontSize:28,fontFamily:'Georgia,serif',color:C.text}}>{totalDone}/{totalAtividades}</div>
+        <div style={{fontSize:11,color:C.textSub,fontFamily:'monospace'}}>atividades concluídas</div>
+      </div>
+      {/* Barra de progresso geral */}
+      <div style={{width:'100%',height:6,background:C.bgSub,borderRadius:3,overflow:'hidden'}}>
+        <div style={{
+          width:`${(totalDone/totalAtividades)*100}%`,
+          height:'100%',
+          background:allComplete?C.gold:C.green,
+          borderRadius:3,
+          transition:'width 0.4s ease'
+        }}/>
+      </div>
+      {allComplete&&<div style={{fontSize:11,color:C.gold,fontFamily:'monospace',marginTop:8,letterSpacing:'0.08em'}}>🏆 CRONOGRAMA COMPLETO — DIA DE VITÓRIA</div>}
+    </SpotlightCard>
+
+    {/* Grid dos 4 pilares */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      {CRONOGRAMA_PILARES.map(pilar=>{
+        const pilarDone=pilar.atividades.filter(a=>checked[a.id]).length;
+        const pilarComplete=pilarDone===pilar.atividades.length;
+        const pct=pilar.atividades.length>0?(pilarDone/pilar.atividades.length)*100:0;
+
+        return <SpotlightCard key={pilar.id} style={{
+          background:pilarComplete
+            ?`linear-gradient(135deg,${pilar.cor}15,${pilar.cor}08)`
+            :C.bgCard,
+          border:`1.5px solid ${pilarComplete?pilar.cor+'80':C.border}`,
+          borderRadius:16,padding:'14px 14px',
+          transition:'all 0.3s ease',
+          animation:pilarComplete?'cronogramaGlow 2s ease infinite':'none'
+        }}>
+          {/* Header do pilar */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:18}}>{pilar.icon}</span>
+              <span style={{fontSize:10,fontFamily:'monospace',fontWeight:700,letterSpacing:'0.1em',
+                color:pilarComplete?pilar.cor:C.text}}>{pilar.label}</span>
+            </div>
+            <span style={{fontSize:10,fontFamily:'monospace',color:pilarComplete?pilar.cor:C.textSub,
+              fontWeight:700}}>{pilarDone}/{pilar.atividades.length}</span>
+          </div>
+          <div style={{fontSize:9,color:C.textSub,fontFamily:'monospace',marginBottom:10,opacity:0.7}}>{pilar.descricao}</div>
+
+          {/* Mini progress bar */}
+          <div style={{width:'100%',height:3,background:C.bgSub,borderRadius:2,overflow:'hidden',marginBottom:10}}>
+            <div style={{
+              width:`${pct}%`,
+              height:'100%',
+              background:pilar.cor,
+              borderRadius:2,
+              transition:'width 0.3s ease'
+            }}/>
+          </div>
+
+          {/* Lista de atividades */}
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {pilar.atividades.map(atv=>{
+              const isChecked=checked[atv.id];
+              return <div key={atv.id} onClick={()=>toggleAtividade(atv,pilar)}
+                style={{
+                  display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',
+                  padding:'6px 8px',borderRadius:8,
+                  background:isChecked?`${pilar.cor}10`:'transparent',
+                  transition:'background 0.2s ease'
+                }}>
+                {/* Custom checkbox */}
+                <div style={{
+                  width:18,height:18,minWidth:18,borderRadius:'50%',
+                  border:`2px solid ${isChecked?pilar.cor:C.textSub+'60'}`,
+                  background:isChecked?pilar.cor:'transparent',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  transition:'all 0.2s ease',
+                  animation:isChecked?'checkPop 0.3s ease':'none',
+                  marginTop:1
+                }}>
+                  {isChecked&&<svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                    <path d="M2 5L4.5 7.5L8 3" stroke="#0B0B0F" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>}
+                </div>
+                {/* Label e micro */}
+                <div style={{flex:1}}>
+                  <div style={{
+                    fontSize:11,fontFamily:'monospace',fontWeight:600,
+                    color:isChecked?pilar.cor:C.text,
+                    textDecoration:isChecked?'line-through':'none',
+                    opacity:isChecked?0.7:1,
+                    transition:'all 0.2s ease'
+                  }}>{atv.label}</div>
+                  <div style={{fontSize:9,color:C.textSub,fontFamily:'monospace',marginTop:2,opacity:isChecked?0.4:0.7}}>{atv.micro}</div>
+                </div>
+              </div>;
+            })}
+          </div>
+        </SpotlightCard>;
+      })}
+    </div>
+
+    {/* Resumo final */}
+    <SpotlightCard style={{
+      background:C.bgCard,border:`1px solid ${C.border}`,
+      borderRadius:16,padding:'14px 16px',marginTop:16
+    }}>
+      <Label text="📊 RESUMO DOS PILARES"/>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {CRONOGRAMA_PILARES.map(p=>{
+          const done=p.atividades.filter(a=>checked[a.id]).length;
+          const complete=done===p.atividades.length;
+          return <div key={p.id} style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:16}}>{p.icon}</span>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                <span style={{fontSize:10,fontFamily:'monospace',fontWeight:700,color:complete?p.cor:C.text,letterSpacing:'0.08em'}}>{p.label}</span>
+                <span style={{fontSize:10,fontFamily:'monospace',color:complete?p.cor:C.textSub}}>{done}/{p.atividades.length}</span>
+              </div>
+              <div style={{width:'100%',height:4,background:C.bgSub,borderRadius:2,overflow:'hidden'}}>
+                <div style={{width:`${p.atividades.length>0?(done/p.atividades.length)*100:0}%`,
+                  height:'100%',background:p.cor,borderRadius:2,transition:'width 0.3s ease'}}/>
+              </div>
+            </div>
+            {complete&&<span style={{fontSize:12}}>✓</span>}
+          </div>;
+        })}
+      </div>
+    </SpotlightCard>
+  </div>;
+}
+
 export default function App(){
   const [tab,setTab]=useState('hoje');
   const [toastMsg,setToastMsg]=useState(null);
@@ -932,6 +1184,7 @@ export default function App(){
     conversion:{consumidos:0,aplicados:0},
     panel:{fe:3,familia:3,saude:3,estudo:3,empresa:3},
     corrDone:false,
+    cronograma:{checked:{}},
   });
 
   const getLocalDateString = () => {
@@ -1042,6 +1295,7 @@ export default function App(){
               conversion: { consumidos: 0, aplicados: 0 },
               panel: prevData.state.panel || { fe: 3, familia: 3, saude: 3, estudo: 3, empresa: 3 },
               corrDone: false,
+              cronograma:{checked:{}},
             });
           }
         }
@@ -1095,7 +1349,7 @@ export default function App(){
     return () => clearTimeout(timeoutId);
   }, [state, loading]);
 
-  const tabs=[{id:'hoje',icon:'⚡',l:'HOJE'},{id:'identidade',icon:'📜',l:'IDENTIDADE'},{id:'evolucao',icon:'📈',l:'EVOLUÇÃO'}];
+  const tabs=[{id:'hoje',icon:'⚡',l:'HOJE'},{id:'identidade',icon:'📜',l:'IDENTIDADE'},{id:'evolucao',icon:'📈',l:'EVOLUÇÃO'},{id:'cronograma',icon:'📋',l:'CRONOGRAMA'}];
   const ti=tabs.find(t=>t.id===tab);
 
   const changeTab=(id)=>{
@@ -1319,6 +1573,7 @@ export default function App(){
           getLocalDateString={getLocalDateString}
         />;
       })()}
+      {tab==='cronograma'&&<TabCronograma state={state} setState={setState} toast={toast}/>}
     </div>
 
     {/* NAV */}
