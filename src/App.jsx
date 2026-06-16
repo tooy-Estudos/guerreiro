@@ -134,6 +134,22 @@ const CRONOGRAMA_PILARES = [
   }
 ];
 
+
+const CRONOGRAMA_DIAS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+const CRONOGRAMA_BLOCOS = [
+  { hora: '05:40', pilar: 'saude', titulo: 'ACORDAR + ÁGUA', detalhe: 'Levantar sem negociar. Hidratar e preparar o corpo.', dias: [0,1,2,3,4,5,6] },
+  { hora: '06:00', pilar: 'saude', titulo: 'TREINO / CARDIO', detalhe: 'Academia cedo: força, massa e definição.', dias: [0,1,2,3,4] },
+  { hora: '07:10', pilar: 'alma', titulo: 'ORAÇÃO + DEVOCIONAL', detalhe: 'Direção antes da pressão do dia.', dias: [0,1,2,3,4,5,6] },
+  { hora: '08:00', pilar: 'trabalho', titulo: 'MAIS SAÚDE', detalhe: 'Licitações, fornecedores e pendências críticas.', dias: [0,1,2,3,4] },
+  { hora: '10:00', pilar: 'trabalho', titulo: 'COMPRASOPS / SISTEMAS', detalhe: 'Construir automações e produtos.', dias: [0,1,2,3,4] },
+  { hora: '12:00', pilar: 'saude', titulo: 'ALMOÇO LIMPO', detalhe: 'Proteína, comida de verdade, sem bagunçar energia.', dias: [0,1,2,3,4,5,6] },
+  { hora: '14:00', pilar: 'mente', titulo: 'ADS / PROGRAMAÇÃO', detalhe: 'Faculdade, código, redes e lógica.', dias: [0,1,2,3,4] },
+  { hora: '16:00', pilar: 'mente', titulo: 'OAB / LEITURA', detalhe: 'Questões, revisão ou leitura estratégica.', dias: [0,1,2,3,4] },
+  { hora: '18:00', pilar: 'alma', titulo: 'IGREJA / FAMÍLIA', detalhe: 'Presença, serviço e relacionamento.', dias: [2,5,6] },
+  { hora: '20:00', pilar: 'trabalho', titulo: 'REVISÃO DO DIA', detalhe: 'Fechar pendências, planejar amanhã e registrar vitórias.', dias: [0,1,2,3,4,6] },
+  { hora: '22:30', pilar: 'saude', titulo: 'DESACELERAR', detalhe: 'Tela baixa, preparar sono e proteger o amanhã.', dias: [0,1,2,3,4,5,6] },
+];
+
 function classificarDia(score) {
   if (score <= 3) return { label: "DIA FRACO", color: C.critical };
   if (score <= 5) return { label: "DIA MÍNIMO", color: C.textMuted };
@@ -1751,208 +1767,177 @@ function ProjectConfig({ state, setState, activeProject, triggerToast }) {
 
 // ─── ABA CRONOGRAMA ───
 function TabCronograma({state, setState, toast}) {
-  const checked = state.cronograma?.checked || {};
-  const totalAtividades = CRONOGRAMA_PILARES.reduce((s,p)=>s+p.atividades.length,0);
-  const totalDone = CRONOGRAMA_PILARES.reduce((s,p)=>s+p.atividades.filter(a=>checked[a.id]).length,0);
-  const allComplete = totalDone===totalAtividades;
-
+  const checked = state.cronograma?.weeklyChecked || {};
+  const pilaresById = Object.fromEntries(CRONOGRAMA_PILARES.map(p => [p.id, p]));
+  const totalSlots = CRONOGRAMA_BLOCOS.reduce((sum, b) => sum + b.dias.length, 0);
+  const totalDone = CRONOGRAMA_BLOCOS.reduce((sum, b, bi) => sum + b.dias.filter(d => checked[`${bi}-${d}`]).length, 0);
+  const pct = totalSlots ? Math.round((totalDone / totalSlots) * 100) : 0;
   const [showCelebration, setShowCelebration] = useState(false);
-  const [prevAllComplete, setPrevAllComplete] = useState(false);
 
-  useEffect(() => {
-    if (allComplete && !prevAllComplete) {
-      setShowCelebration(true);
-      toast('🏆 CRONOGRAMA COMPLETO! Dia de vitória total.');
-      setTimeout(() => setShowCelebration(false), 3000);
-    }
-    setPrevAllComplete(allComplete);
-  }, [allComplete]);
-
-  const toggleAtividade = (atividade, pilar) => {
-    const wasChecked = checked[atividade.id];
-    const newChecked = { ...checked };
-    if (wasChecked) { delete newChecked[atividade.id]; }
-    else { newChecked[atividade.id] = true; }
-
-    setState(s => ({ ...s, cronograma: { ...s.cronograma, checked: newChecked } }));
-
-    if (!wasChecked) {
-      const pilarDone = pilar.atividades.filter(a => newChecked[a.id]).length;
-      const pilarTotal = pilar.atividades.length;
-      if (pilarDone === pilarTotal) {
-        toast(`${pilar.icon} ${pilar.label} completa! +força espiritual.`);
-      } else {
-        const msgs = {
-          mente: 'Mente fortalecida. Continue evoluindo.',
-          alma: 'Alma reforçada. Mantenha a conexão.',
-          trabalho: 'Trabalho avançando. Execute com excelência.',
-          saude: 'Saúde protegida. Corpo em movimento.',
-        };
-        toast(`✓ ${atividade.label} concluída. ${msgs[pilar.id]}`);
+  const toggleSlot = (blocoIndex, diaIndex) => {
+    const key = `${blocoIndex}-${diaIndex}`;
+    const newChecked = { ...checked, [key]: !checked[key] };
+    if (!newChecked[key]) delete newChecked[key];
+    setState(s => ({ ...s, cronograma: { ...s.cronograma, weeklyChecked: newChecked } }));
+    if (!checked[key]) {
+      const bloco = CRONOGRAMA_BLOCOS[blocoIndex];
+      const pilar = pilaresById[bloco.pilar];
+      toast(`${pilar.icon} ${bloco.titulo} concluído. ${pilar.label} avançou.`);
+      const doneNow = Object.keys(newChecked).length;
+      if (doneNow === totalSlots) {
+        setShowCelebration(true);
+        toast('🏆 SEMANA COMPLETA! Todos os blocos do cronograma foram vencidos.');
+        setTimeout(() => setShowCelebration(false), 2800);
       }
     }
   };
 
+  const pilarStats = CRONOGRAMA_PILARES.map(p => {
+    let total = 0, done = 0;
+    CRONOGRAMA_BLOCOS.forEach((b, bi) => {
+      if (b.pilar !== p.id) return;
+      total += b.dias.length;
+      done += b.dias.filter(d => checked[`${bi}-${d}`]).length;
+    });
+    return { ...p, total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+  });
+
   return (
-    <div style={{ padding: '14px 16px 100px' }}>
+    <div style={{ padding: '14px 12px 100px' }}>
       <style>{`
-        @keyframes cronogramaGlow {
-          0% { box-shadow: 0 0 8px rgba(201,169,106,0.2) }
-          50% { box-shadow: 0 0 24px rgba(201,169,106,0.5) }
-          100% { box-shadow: 0 0 8px rgba(201,169,106,0.2) }
-        }
-        @keyframes cronogramaGoldBorder {
-          0% { border-color: #1F2937 }
-          50% { border-color: #C9A96A }
-          100% { border-color: #1F2937 }
-        }
-        @keyframes checkPop {
-          0% { transform: scale(0.8) }
-          50% { transform: scale(1.2) }
-          100% { transform: scale(1) }
-        }
+        @keyframes checkPop { 0% { transform: scale(.8) } 50% { transform: scale(1.15) } 100% { transform: scale(1) } }
+        .schedule-scroll::-webkit-scrollbar{height:6px}.schedule-scroll::-webkit-scrollbar-thumb{background:#374151;border-radius:20px}
       `}</style>
 
       {showCelebration && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(11,11,15,0.9)', display: 'flex',
-          flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 32
-        }}>
-          <div style={{ fontSize: 72, marginBottom: 16, animation: 'checkPop 0.5s ease' }}>🏆</div>
-          <div style={{ fontSize: 24, fontFamily: 'Georgia,serif', color: C.gold, textAlign: 'center', marginBottom: 8 }}>DIA DE VITÓRIA TOTAL</div>
-          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: 'monospace', textAlign: 'center' }}>16/16 atividades concluídas. Você é imparável.</div>
+        <div style={{ position:'fixed', inset:0, background:'rgba(11,11,15,.92)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', zIndex:500 }}>
+          <div style={{fontSize:72, animation:'checkPop .5s ease'}}>🏆</div>
+          <div style={{fontSize:22, color:C.gold, fontFamily:'Georgia,serif', textAlign:'center'}}>SEMANA DO GUERREIRO DOMINADA</div>
+          <div style={{fontSize:12, color:C.textMuted, fontFamily:'monospace', marginTop:8}}>cronograma inteiro concluído</div>
         </div>
       )}
 
-      <SpotlightCard style={{
-        background: 'linear-gradient(135deg,#101828,#0D1F35)',
-        border: `1.5px solid ${allComplete ? C.gold : C.border}`,
-        borderRadius: 16, padding: '14px 16px', marginBottom: 16,
-        animation: allComplete ? 'cronogramaGoldBorder 2s ease infinite' : 'none'
-      }}>
-        <Label text="📋 CRONOGRAMA DO GUERREIRO" color={C.gold} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-          <div style={{ fontSize: 28, fontFamily: 'Georgia,serif', color: C.text }}>{totalDone}/{totalAtividades}</div>
-          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace' }}>atividades concluídas</div>
+      <SpotlightCard style={{ background:'linear-gradient(135deg,#101828,#0D1F35)', border:`1px solid ${C.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+        <Label text="📋 CRONOGRAMA SEMANAL DO GUERREIRO" color={C.gold} />
+        <div style={{fontSize:12, color:C.textMuted, lineHeight:1.5, marginBottom:12}}>
+          Modelo visual por horário, dia e pilar. Marcou, completou. A semana mostra onde sua vida está avançando: mente, alma, trabalho e saúde.
         </div>
-        <div style={{ width: '100%', height: 6, background: '#222', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{
-            width: `${(totalDone / totalAtividades) * 100}%`,
-            height: '100%',
-            background: allComplete ? C.gold : C.success,
-            borderRadius: 3,
-            transition: 'width 0.4s ease'
-          }} />
+        <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:10}}>
+          <div style={{fontSize:30, color:C.text, fontFamily:'Georgia,serif'}}>{pct}%</div>
+          <div style={{flex:1}}>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:C.textMuted, fontFamily:'monospace', marginBottom:5}}>
+              <span>{totalDone}/{totalSlots} blocos concluídos</span><span>semana ativa</span>
+            </div>
+            <div style={{height:7, background:'#222', borderRadius:6, overflow:'hidden'}}><div style={{height:'100%', width:`${pct}%`, background:pct===100?C.gold:C.success, transition:'width .25s ease'}} /></div>
+          </div>
         </div>
-        {allComplete && <div style={{ fontSize: 11, color: C.gold, fontFamily: 'monospace', marginTop: 8, letterSpacing: '0.08em' }}>🏆 CRONOGRAMA COMPLETO — DIA DE VITÓRIA</div>}
+        <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8}}>
+          {pilarStats.map(p => (
+            <div key={p.id} style={{border:`1px solid ${p.cor}55`, background:`${p.cor}10`, borderRadius:10, padding:'8px 6px'}}>
+              <div style={{fontSize:16}}>{p.icon}</div>
+              <div style={{fontSize:9, color:p.cor, fontWeight:800, fontFamily:'monospace'}}>{p.label}</div>
+              <div style={{fontSize:9, color:C.textMuted, fontFamily:'monospace'}}>{p.done}/{p.total}</div>
+            </div>
+          ))}
+        </div>
       </SpotlightCard>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {CRONOGRAMA_PILARES.map(pilar => {
-          const pilarDone = pilar.atividades.filter(a => checked[a.id]).length;
-          const pilarComplete = pilarDone === pilar.atividades.length;
-          const pct = pilar.atividades.length > 0 ? (pilarDone / pilar.atividades.length) * 100 : 0;
-
-          return (
-            <SpotlightCard key={pilar.id} style={{
-              background: pilarComplete ? `linear-gradient(135deg,${pilar.cor}15,${pilar.cor}08)` : C.surface,
-              border: `1.5px solid ${pilarComplete ? pilar.cor + '80' : C.border}`,
-              borderRadius: 16, padding: '14px 14px',
-              transition: 'all 0.3s ease',
-              animation: pilarComplete ? 'cronogramaGlow 2s ease infinite' : 'none'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 18 }}>{pilar.icon}</span>
-                  <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.1em', color: pilarComplete ? pilar.cor : C.text }}>{pilar.label}</span>
-                </div>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: pilarComplete ? pilar.cor : C.textMuted, fontWeight: 700 }}>{pilarDone}/{pilar.atividades.length}</span>
-              </div>
-              <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 10, opacity: 0.7 }}>{pilar.descricao}</div>
-
-              <div style={{ width: '100%', height: 3, background: '#222', borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
-                <div style={{
-                  width: `${pct}%`,
-                  height: '100%',
-                  background: pilar.cor,
-                  borderRadius: 2,
-                  transition: 'width 0.3s ease'
-                }} />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {pilar.atividades.map(atv => {
-                  const isChecked = checked[atv.id];
+      <div className="schedule-scroll" style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', border:`1px solid ${C.border}`, borderRadius:14, background:C.surface }}>
+        <div style={{ minWidth: 900 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', position:'sticky', top:0, zIndex:2 }}>
+            <div style={{ padding:10, background:'#111827', color:C.gold, fontSize:10, fontWeight:800, fontFamily:'monospace', borderRight:`1px solid ${C.border}` }}>HORÁRIO</div>
+            {CRONOGRAMA_DIAS.map(d => <div key={d} style={{ padding:10, background:'#111827', color:C.text, fontSize:10, fontWeight:800, fontFamily:'monospace', textAlign:'center', borderRight:`1px solid ${C.border}` }}>{d}</div>)}
+          </div>
+          {CRONOGRAMA_BLOCOS.map((bloco, bi) => {
+            const pilar = pilaresById[bloco.pilar];
+            return (
+              <div key={bi} style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', borderTop:`1px solid ${C.border}` }}>
+                <div style={{ padding:10, color:C.text, fontSize:11, fontWeight:800, fontFamily:'monospace', background:'#0F172A', borderRight:`1px solid ${C.border}` }}>{bloco.hora}</div>
+                {CRONOGRAMA_DIAS.map((d, di) => {
+                  const active = bloco.dias.includes(di);
+                  const done = checked[`${bi}-${di}`];
                   return (
-                    <div key={atv.id} onClick={() => toggleAtividade(atv, pilar)}
-                      style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer',
-                        padding: '6px 8px', borderRadius: 8,
-                        background: isChecked ? `${pilar.cor}10` : 'transparent',
-                        transition: 'background 0.2s ease'
-                      }}>
-                      <div style={{
-                        width: 18, height: 18, minWidth: 18, borderRadius: '50%',
-                        border: `2px solid ${isChecked ? pilar.cor : C.textMuted + '60'}`,
-                        background: isChecked ? pilar.cor : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.2s ease',
-                        animation: isChecked ? 'checkPop 0.3s ease' : 'none',
-                        marginTop: 1
-                      }}>
-                        {isChecked && (
-                          <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5L4.5 7.5L8 3" stroke="#0B0B0F" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{
-                          fontSize: 11, fontFamily: 'monospace', fontWeight: 600,
-                          color: isChecked ? pilar.cor : C.text,
-                          textDecoration: isChecked ? 'line-through' : 'none',
-                          opacity: isChecked ? 0.7 : 1,
-                          transition: 'all 0.2s ease'
-                        }}>{atv.label}</div>
-                        <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginTop: 2, opacity: isChecked ? 0.4 : 0.7 }}>{atv.micro}</div>
-                      </div>
+                    <div key={d} onClick={() => active && toggleSlot(bi, di)} style={{
+                      minHeight:70, padding:8, borderRight:`1px solid ${C.border}`, cursor:active?'pointer':'default',
+                      background: active ? (done ? `${pilar.cor}26` : `${pilar.cor}10`) : 'rgba(255,255,255,.015)',
+                      opacity: active ? 1 : .22, transition:'all .18s ease'
+                    }}>
+                      {active && <>
+                        <div style={{display:'flex', justifyContent:'space-between', gap:4, alignItems:'flex-start'}}>
+                          <span style={{fontSize:9, fontFamily:'monospace', fontWeight:900, color:done?pilar.cor:C.text}}>{bloco.titulo}</span>
+                          <span style={{fontSize:13}}>{done?'✅':pilar.icon}</span>
+                        </div>
+                        <div style={{fontSize:8.5, color:C.textMuted, lineHeight:1.35, marginTop:5}}>{bloco.detalhe}</div>
+                      </>}
                     </div>
                   );
                 })}
               </div>
-            </SpotlightCard>
-          );
-        })}
-      </div>
-
-      <SpotlightCard style={{
-        background: C.surface, border: `1px solid ${C.border}`,
-        borderRadius: 16, padding: '14px 16px', marginTop: 16
-      }}>
-        <Label text="📊 RESUMO DOS PILARES" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {CRONOGRAMA_PILARES.map(p => {
-            const done = p.atividades.filter(a => checked[a.id]).length;
-            const complete = done === p.atividades.length;
-            return (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 16 }}>{p.icon}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: complete ? p.cor : C.text, letterSpacing: '0.08em' }}>{p.label}</span>
-                    <span style={{ fontSize: 10, fontFamily: 'monospace', color: complete ? p.cor : C.textMuted }}>{done}/{p.atividades.length}</span>
-                  </div>
-                  <div style={{ width: '100%', height: 4, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${p.atividades.length > 0 ? (done / p.atividades.length) * 100 : 0}%`,
-                      height: '100%', background: p.cor, borderRadius: 2, transition: 'width 0.3s ease' }} />
-                  </div>
-                </div>
-                {complete && <span style={{ fontSize: 12, color: C.success }}>✓</span>}
-              </div>
             );
           })}
         </div>
+      </div>
+
+      <div style={{fontSize:10, color:C.textMuted, fontFamily:'monospace', marginTop:10, lineHeight:1.5}}>
+        Dica: deslize a tabela para o lado no celular. Use a aba RAMIFICAÇÕES para criar projetos específicos ligados aos pilares.
+      </div>
+    </div>
+  );
+}
+
+// ─── ABA RAMIFICAÇÕES / PROJETOS POR PILAR ───
+function TabRamificacoes({state, setState, toast}) {
+  const [pilarId, setPilarId] = useState('trabalho');
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [branchText, setBranchText] = useState('');
+  const pilar = CRONOGRAMA_PILARES.find(p => p.id === pilarId) || CRONOGRAMA_PILARES[0];
+  const projects = state.projects || [];
+  const linked = projects.filter(p => p.pilarId === pilarId);
+
+  const criarProjeto = () => {
+    if (!name.trim()) { toast('Dê um nome para o projeto.'); return; }
+    const branches = branchText.split('\n').map(x => x.trim()).filter(Boolean);
+    const roadmap = branches.map((b, i) => ({ id: `rm-${Date.now()}-${i}`, title: b, status: 'pending', created_at: new Date().toISOString() }));
+    const newProj = {
+      id: 'proj-' + Date.now(), name: name.trim(), description: desc.trim() || `Ramificação do pilar ${pilar.label}`,
+      emoji: pilar.icon, color: pilar.cor, objective: pilar.label, target: 'ongoing', pilarId,
+      defaultTimer: 1500, roadmap, notes: []
+    };
+    setState(s => ({ ...s, projects: [...(s.projects || []), newProj], activeProjectId: newProj.id }));
+    setName(''); setDesc(''); setBranchText('');
+    toast(`${pilar.icon} Projeto criado em ${pilar.label} com ${branches.length} ramificações.`);
+  };
+
+  return (
+    <div style={{ padding:'14px 16px 100px' }}>
+      <SpotlightCard style={{background:'linear-gradient(135deg,#111827,#0B0B0F)', border:`1px solid ${C.border}`, borderRadius:16, padding:16, marginBottom:14}}>
+        <Label text="🌳 RAMIFICAÇÕES DOS PILARES" color={C.gold} />
+        <div style={{fontSize:12, color:C.textMuted, lineHeight:1.5}}>Crie projetos específicos dentro dos 4 pilares principais. Ex.: Trabalho → ComprasOps, Mais Saúde; Mente → ADS/OAB; Alma → Igreja; Saúde → Academia.</div>
       </SpotlightCard>
+
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:14}}>
+        {CRONOGRAMA_PILARES.map(p => <button key={p.id} onClick={()=>setPilarId(p.id)} style={{
+          border:`1.5px solid ${pilarId===p.id?p.cor:C.border}`, background:pilarId===p.id?`${p.cor}18`:C.surface, borderRadius:12, padding:'10px 6px', color:C.text, cursor:'pointer'
+        }}><div style={{fontSize:20}}>{p.icon}</div><div style={{fontSize:9, fontWeight:800, fontFamily:'monospace', color:pilarId===p.id?p.cor:C.textMuted}}>{p.label}</div></button>)}
+      </div>
+
+      <SpotlightCard style={{background:C.surface, border:`1px solid ${pilar.cor}66`, borderRadius:16, padding:16, marginBottom:14}}>
+        <Label text={`${pilar.icon} NOVO PROJETO EM ${pilar.label}`} color={pilar.cor} />
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome do projeto: Ex. ComprasOps, Academia, OAB..." style={{width:'100%', boxSizing:'border-box', background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:10}} />
+        <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Objetivo do projeto" rows={2} style={{width:'100%', boxSizing:'border-box', background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:10}} />
+        <textarea value={branchText} onChange={e=>setBranchText(e.target.value)} placeholder={'Ramificações / etapas, uma por linha:\nEx.: MVP funcional\nWebhook WhatsApp\nDashboard financeiro'} rows={5} style={{width:'100%', boxSizing:'border-box', background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:12}} />
+        <Btn label="CRIAR PROJETO E ABRIR" onClick={criarProjeto} full />
+      </SpotlightCard>
+
+      <Label text={`PROJETOS EM ${pilar.label} (${linked.length})`} color={pilar.cor} />
+      <div style={{display:'flex', flexDirection:'column', gap:10, marginTop:8}}>
+        {linked.map(pr => <div key={pr.id} style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:14, display:'flex', justifyContent:'space-between', gap:12, alignItems:'center'}}>
+          <div><div style={{fontSize:14, fontWeight:800, color:C.text}}>{pr.emoji} {pr.name}</div><div style={{fontSize:10, color:C.textMuted, marginTop:3}}>{(pr.roadmap||[]).length} ramificações no roadmap</div></div>
+          <button onClick={()=>setState(s=>({...s, activeProjectId:pr.id}))} style={{background:pr.color||pilar.cor, color:C.bg, border:'none', borderRadius:8, padding:'8px 10px', fontWeight:800, fontSize:10}}>ABRIR</button>
+        </div>)}
+        {linked.length===0 && <div style={{border:`1px dashed ${C.border}`, borderRadius:12, padding:24, textAlign:'center', color:C.textMuted, fontSize:11, fontFamily:'monospace'}}>Nenhum projeto nesse pilar ainda.</div>}
+      </div>
     </div>
   );
 }
@@ -2419,7 +2404,8 @@ export default function App() {
           <div style={{ display: 'flex', height: '100%' }}>
             {[
               { id: 'dashboard', icon: '📂', l: 'PROJETOS' },
-              { id: 'cronograma', icon: '📋', l: 'CRONOGRAMA' }
+              { id: 'cronograma', icon: '📋', l: 'CRONOGRAMA' },
+              { id: 'ramificacoes', icon: '🌳', l: 'RAMIFICAÇÕES' }
             ].map(t => {
               const active = mainTab === t.id;
               return (
@@ -2546,8 +2532,10 @@ export default function App() {
         {!activeProject ? (
           mainTab === 'dashboard' ? (
             <DashboardMain state={state} setState={setState} triggerToast={triggerToast} score={score} classObj={classObj} />
-          ) : (
+          ) : mainTab === 'cronograma' ? (
             <TabCronograma state={state} setState={setState} toast={triggerToast} />
+          ) : (
+            <TabRamificacoes state={state} setState={setState} toast={triggerToast} />
           )
         ) : (
           <div>
