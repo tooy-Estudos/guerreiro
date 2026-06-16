@@ -198,6 +198,52 @@ function Label({ text, color = C.textMuted }) {
   );
 }
 
+
+const WEEK_DAYS = [
+  { key: 'domingo', label: 'DOM' },
+  { key: 'segunda', label: 'SEG' },
+  { key: 'terca', label: 'TER' },
+  { key: 'quarta', label: 'QUA' },
+  { key: 'quinta', label: 'QUI' },
+  { key: 'sexta', label: 'SEX' },
+  { key: 'sabado', label: 'SÁB' }
+];
+
+const normalizeWeekDay = (date = new Date()) => WEEK_DAYS[date.getDay()].key;
+const isMissionClosed = (status) => ['done', 'partial', 'skipped'].includes(status);
+
+const statusMeta = (status) => {
+  if (status === 'done') return { pct: 100, label: 'Completo', color: C.success, icon: '●' };
+  if (status === 'partial') return { pct: 50, label: 'Modo mínimo', color: C.warning, icon: '◐' };
+  if (status === 'skipped') return { pct: 0, label: 'Não fiz', color: C.critical, icon: '○' };
+  return { pct: 0, label: 'Pendente', color: C.textMuted, icon: '○' };
+};
+
+const getProjectRoutinesForToday = (project, date = new Date()) => {
+  const day = normalizeWeekDay(date);
+  return (project?.rotinas || []).filter(r => r.diaSemana === day && r.ativo !== false);
+};
+
+const buildMissionFromRoutine = (routine, project, todayStr) => ({
+  id: `missao-${routine.id}-${todayStr}`,
+  titulo: routine.tarefaDescricao,
+  prova: routine.detalhes || `Executar ${routine.tarefaDescricao}`,
+  area: project?.pilarId === 'corpo' ? 'saude' : project?.pilarId === 'alma' ? 'fe' : project?.pilarId === 'trabalho' ? 'carreira' : 'estudo',
+  status: 'pendente',
+  statusConclusao: 0,
+  tempoEstimado: routine.tempoEstimado || 25,
+  rotinaId: routine.id,
+  project_id: project.id,
+  created_at: `${todayStr}T00:00:00.000Z`,
+  generated: true
+});
+
+const calculateMissionScore = (missions) => {
+  if (!missions.length) return 0;
+  const total = missions.reduce((acc, m) => acc + (m.statusConclusao ?? statusMeta(m.status).pct), 0);
+  return Math.round(total / missions.length);
+};
+
 function Btn({ label, variant = 'primary', onClick, disabled, full, small, activeColor = C.accent }) {
   const styles = {
     primary: { background: activeColor, color: C.bg, border: 'none' },
@@ -370,83 +416,102 @@ function ComandoCentralOverview({ state, score }) {
   const missions = state.missions || [];
   const scheduleItems = state.cronograma?.items || [];
   const checked = state.cronograma?.weeklyChecked || {};
+  const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  const todayMissions = missions.filter(m => m.created_at?.startsWith(todayStr));
+  const closedToday = todayMissions.filter(m => isMissionClosed(m.status));
+  const baseScore = todayMissions.length ? calculateMissionScore(todayMissions) : Math.min(Math.round((score / 10) * 100), 100);
   const totalSchedule = scheduleItems.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
   const doneSchedule = Object.values(checked).filter(Boolean).length;
-  const schedulePct = totalSchedule ? Math.round((doneSchedule / totalSchedule) * 100) : Math.min(Math.round((score / 10) * 100), 100);
+  const schedulePct = totalSchedule ? Math.round((doneSchedule / totalSchedule) * 100) : baseScore;
+
+  const classify = (pct) => pct >= 90 ? 'Excelente' : pct >= 75 ? 'Muito bom' : pct >= 50 ? 'Bom' : pct > 0 ? 'Em movimento' : 'Começar hoje';
+
   const pillarStats = COMANDO_PILARES.map(pilar => {
-    const pilarProjects = projects.filter(p => p.pilar === pilar.id || pilar.aliases.includes(p.area) || pilar.aliases.includes(p.objective?.toLowerCase?.() || ''));
+    const pilarProjects = projects.filter(p => p.pilar === pilar.id || pilar.aliases.includes(p.area) || pilar.aliases.includes(p.objective?.toLowerCase?.() || '') || pilar.aliases.includes(p.pilarId));
+    const pilarMissions = missions.filter(m => pilar.aliases.includes(m.area) || pilarProjects.some(p => p.id === m.project_id));
+    const pilarToday = pilarMissions.filter(m => m.created_at?.startsWith(todayStr));
     const pilarSchedule = scheduleItems.filter(i => i.pilar === pilar.id || pilarProjects.some(p => p.id === i.projectId));
-    const total = pilarSchedule.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
-    const done = pilarSchedule.reduce((acc, item) => acc + (item.dias || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
-    const weightedTotal = pilarSchedule.reduce((acc, item) => acc + ((item.dias?.length || 0) * (item.peso || 50)), 0);
-    const weightedDone = pilarSchedule.reduce((acc, item) => acc + (item.dias || []).filter(d => checked[`${item.id}-${d}`]).length * (item.peso || 50), 0);
-    const roadmap = pilarProjects.flatMap(p => p.roadmap || []);
-    const roadmapDone = roadmap.filter(r => r.status === 'completed').length;
-    const pct = weightedTotal ? Math.round((weightedDone / weightedTotal) * 100) : roadmap.length ? Math.round((roadmapDone / roadmap.length) * 100) : 0;
-    return { ...pilar, projects: pilarProjects, pct, total, done, weightedTotal, weightedDone, roadmap, roadmapDone };
+    const total = pilarToday.length || pilarSchedule.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
+    const done = pilarToday.length ? pilarToday.filter(m => isMissionClosed(m.status)).length : pilarSchedule.reduce((acc, item) => acc + (item.dias || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+    const pct = pilarToday.length ? calculateMissionScore(pilarToday) : total ? Math.round((done / total) * 100) : 0;
+    return { ...pilar, projects: pilarProjects, pct, total, done, today: pilarToday };
   });
-  const completedMissions = missions.filter(m => m.status === 'done').length;
-  const avg = pillarStats.length ? Math.round(pillarStats.reduce((s, p) => s + p.pct, 0) / pillarStats.length) : schedulePct;
+
+  const avg = todayMissions.length ? baseScore : (pillarStats.some(p => p.pct) ? Math.round(pillarStats.reduce((s, p) => s + p.pct, 0) / pillarStats.length) : schedulePct);
+  const headline = avg >= 85 ? 'Disciplina hoje, liberdade amanhã.' : avg >= 50 ? 'Hoje é dia de sustentar a corrente.' : 'Comece pequeno. Zerar não é opção.';
+  const foco = todayMissions.find(m => !isMissionClosed(m.status)) || todayMissions[0];
+  const antidoto = avg >= 75 ? 'Mantenha o ritmo. Feche o que foi planejado sem inventar moda.' : 'Modo mínimo: escolha uma missão e execute 5 minutos agora.';
 
   return (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '260px minmax(0,1fr) 260px', gap: 14 }} className="command-grid">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <SpotlightCard color={C.gold}>
-            <Label text="ARQUITETURA DO SISTEMA" color={C.gold} />
-            <p style={{ color: C.textMuted, fontSize: 12, lineHeight: 1.5, marginTop: 0 }}>Fluxo geral do Comando Central: pilares → projetos → ramificações → cronograma → métricas.</p>
-            {['Núcleo do Sistema', 'Pilares Principais', 'Projetos / Ramificações', 'Missões e Provas', 'Métricas / Progresso'].map((x, i) => <div key={x} style={{ display:'flex', alignItems:'center', gap:8, color:C.text, fontSize:12, marginTop:8 }}><span style={{ color:C.gold }}>0{i+1}</span>{x}</div>)}
-          </SpotlightCard>
-          <SpotlightCard color={C.gold}>
-            <Label text="FLUXO DIÁRIO" color={C.gold} />
-            {COMANDO_FLUXO.map(([title, desc], i) => <div key={title} style={{ display:'grid', gridTemplateColumns:'26px 1fr', gap:8, marginBottom:10 }}><div style={{ width:22, height:22, borderRadius:'50%', background:`${C.gold}22`, border:`1px solid ${C.gold}`, color:C.gold, display:'grid', placeItems:'center', fontSize:10, fontWeight:800 }}>{i+1}</div><div><div style={{ color:C.text, fontSize:11, fontWeight:800 }}>{title}</div><div style={{ color:C.textMuted, fontSize:10, lineHeight:1.35 }}>{desc}</div></div></div>)}
-          </SpotlightCard>
-          <SpotlightCard color={C.gold}>
-            <Label text="REGRAS DO JOGO" color={C.gold} />
-            {['EXECUÇÃO > PERFEIÇÃO', 'CONSISTÊNCIA > MOTIVAÇÃO', 'DISCIPLINA > TALENTO'].map(r => <div key={r} style={{ color:C.text, fontSize:11, fontWeight:800, padding:'7px 0', borderBottom:`1px solid ${C.border}` }}>{r}</div>)}
-          </SpotlightCard>
+      <div style={{ background: 'linear-gradient(180deg, #111827 0%, #0B0B0F 100%)', border: `1px solid ${C.border}`, borderRadius: 24, padding: 18, boxShadow: '0 24px 80px #0008' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:16 }}>
+          <div>
+            <div style={{ color:C.gold, fontSize:11, fontFamily:'monospace', letterSpacing:'.18em', fontWeight:900 }}>COMANDO CENTRAL</div>
+            <div style={{ color:C.text, fontSize:24, fontWeight:950, lineHeight:1.05 }}>SISTEMA OPERACIONAL DA SUA VIDA</div>
+            <div style={{ color:C.textMuted, fontSize:13, marginTop:8 }}>Bom dia, Guerreiro. {headline}</div>
+          </div>
+          <div style={{ minWidth:112, height:112, borderRadius:'50%', background:`conic-gradient(${C.gold} ${avg * 3.6}deg, #1F2937 0deg)`, display:'grid', placeItems:'center', boxShadow:`0 0 34px ${C.gold}20` }}>
+            <div style={{ width:82, height:82, borderRadius:'50%', background:C.surface, display:'grid', placeItems:'center', textAlign:'center' }}>
+              <div style={{ color:C.gold, fontSize:27, fontWeight:950 }}>{avg}%</div>
+              <div style={{ color:C.textMuted, fontSize:9, fontWeight:800 }}>{classify(avg)}</div>
+            </div>
+          </div>
         </div>
 
-        <div>
-          <SpotlightCard color={C.gold}>
-            <div style={{ textAlign:'center', marginBottom:16 }}>
-              <div style={{ fontSize:10, color:C.gold, letterSpacing:'.35em', fontFamily:'monospace' }}>⚡ COMANDO CENTRAL</div>
-              <div style={{ fontSize:26, color:C.text, fontWeight:900, marginTop:4 }}>SISTEMA OPERACIONAL DA SUA VIDA</div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:14 }}>
-                {['MISSÃO', 'AÇÃO', 'FUGA', 'REFLEXÃO'].map(x => <div key={x} style={{ border:`1px solid ${C.border}`, background:C.bg, borderRadius:10, padding:10, color:C.text, fontSize:11, fontWeight:800 }}>{x}</div>)}
-              </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0,1fr))', gap:10, marginBottom:16 }} className="pillar-grid">
+          {pillarStats.map(p => <div key={p.id} style={{ background:C.surface, border:`1px solid ${p.cor}44`, borderRadius:18, padding:13, minHeight:124 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}><span style={{ fontSize:22 }}>{p.icon}</span><b style={{ color:C.text, fontSize:13 }}>{p.nome}</b></div>
+              <b style={{ color:p.cor, fontSize:18 }}>{p.pct}%</b>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0,1fr))', gap:12 }} className="pillar-grid">
-              {pillarStats.map(p => <div key={p.id} style={{ background:C.bg, border:`1px solid ${p.cor}55`, borderRadius:14, padding:14, minHeight:250, boxShadow:`0 0 24px ${p.cor}12` }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}><span style={{ fontSize:22 }}>{p.icon}</span><div><div style={{ color:p.cor, fontSize:15, fontWeight:900 }}>{p.nome}</div><div style={{ color:C.textMuted, fontSize:10 }}>{p.desc}</div></div></div>
-                <div style={{ display:'flex', justifyContent:'space-between', color:C.textMuted, fontSize:10, margin:'10px 0 4px' }}><span>EVOLUÇÃO</span><b style={{ color:p.cor }}>{p.pct}%</b></div>
-                <div style={{ height:6, background:'#222', borderRadius:10, overflow:'hidden', marginBottom:12 }}><div style={{ width:`${p.pct}%`, height:'100%', background:p.cor }} /></div>
-                <div style={{ color:C.text, fontSize:11, fontWeight:800, marginBottom:6 }}>ÁRVORE DE HABILIDADES</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:10 }}>
-                  {p.skillTree.map(([skill, peso]) => <div key={skill} style={{ border:`1px solid ${p.cor}33`, borderRadius:8, padding:'6px 7px', background:`${p.cor}0f` }}><div style={{ color:C.text, fontSize:10, fontWeight:800 }}>{skill}</div><div style={{ color:p.cor, fontSize:9, fontWeight:900 }}>{peso}% XP</div></div>)}
-                </div>
-                <div style={{ color:C.text, fontSize:11, fontWeight:800, marginBottom:6 }}>RAMIFICAÇÕES</div>
-                {(p.projects.length ? p.projects.slice(0,3) : [{ name: 'Criar projeto nesta aba', roadmap: [] }]).map(proj => <div key={proj.id || proj.name} style={{ borderLeft:`2px solid ${p.cor}`, paddingLeft:8, marginBottom:8 }}><div style={{ color:C.text, fontSize:11, fontWeight:700 }}>{proj.emoji || '•'} {proj.name}</div><div style={{ color:C.textMuted, fontSize:10 }}>{(proj.roadmap || []).slice(0,2).map(r => r.title || r.text || r).join(' • ') || 'Sem etapas definidas'}</div></div>)}
-                <div style={{ marginTop:10, padding:8, border:`1px solid ${p.cor}33`, borderRadius:10, background:`${p.cor}10` }}><div style={{ color:p.cor, fontSize:10, fontWeight:900 }}>XP DO DIA</div><div style={{ color:C.textMuted, fontSize:10 }}>{p.weightedDone}/{p.weightedTotal || 100} XP ponderado · {p.done}/{p.total || p.roadmap.length || 1} ações</div></div>
-              </div>)}
+            <div style={{ color:C.textMuted, fontSize:10, marginTop:2 }}>{classify(p.pct)}</div>
+            <div style={{ height:6, background:'#222', borderRadius:999, overflow:'hidden', margin:'10px 0' }}><div style={{ width:`${p.pct}%`, height:'100%', background:p.cor, borderRadius:999 }} /></div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, color:C.textMuted, fontSize:10 }}>
+              <div><b style={{ color:C.text }}>{p.total || p.projects.length}</b><br/>Planejado</div>
+              <div><b style={{ color:C.text }}>{p.done}</b><br/>Executado</div>
             </div>
-          </SpotlightCard>
+          </div>)}
         </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <SpotlightCard color={C.gold}>
-            <Label text="EVOLUÇÃO GERAL" color={C.gold} />
-            <div style={{ width:122, height:122, borderRadius:'50%', margin:'0 auto 12px', background:`conic-gradient(${C.gold} ${avg * 3.6}deg, #222 0deg)`, display:'grid', placeItems:'center' }}><div style={{ width:88, height:88, borderRadius:'50%', background:C.surface, display:'grid', placeItems:'center', color:C.gold, fontSize:24, fontWeight:900 }}>{avg}%</div></div>
-            {pillarStats.map(p => <div key={p.id} style={{ marginBottom:8 }}><div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:C.textMuted }}><span>{p.nome}</span><b style={{ color:p.cor }}>{p.pct}%</b></div><div style={{ height:4, background:'#222', borderRadius:10 }}><div style={{ width:`${p.pct}%`, height:'100%', background:p.cor, borderRadius:10 }} /></div></div>)}
-          </SpotlightCard>
-          <SpotlightCard color={C.accent}>
-            <Label text="ANTÍDOTOS COMPORTAMENTAIS" color={C.accent} />
-            {ANTIDOTOS_COMPORTAMENTAIS.map(a => <div key={a} style={{ display:'flex', justifyContent:'space-between', color:C.text, fontSize:11, padding:'7px 0', borderBottom:`1px solid ${C.border}` }}><span>{a}</span><b style={{ color:C.success }}>+2</b></div>)}
-          </SpotlightCard>
-          <SpotlightCard color={C.gold}>
-            <Label text="MÉTRICAS PRINCIPAIS" color={C.gold} />
-            {[['Missões concluídas', completedMissions], ['Projetos ativos', projects.length], ['Blocos no cronograma', totalSchedule], ['Sequência atual', `${state.streak || 0} dias`], ['Score semanal', `${avg}%`]].map(([k,v]) => <div key={k} style={{ display:'flex', justifyContent:'space-between', color:C.text, fontSize:11, marginBottom:7 }}><span>{k}</span><b style={{ color:C.gold }}>{v}</b></div>)}
-          </SpotlightCard>
+        <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1.3fr) minmax(260px,.7fr)', gap:14 }} className="command-grid">
+          <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:18, padding:15 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <Label text={`MISSÕES DE HOJE ${todayMissions.length}`} color={C.accent} />
+              <span style={{ color:C.textMuted, fontSize:10 }}>{closedToday.length}/{todayMissions.length || 0} registradas</span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+              {(todayMissions.length ? todayMissions.slice(0,6) : [{ id:'empty', titulo:'Cadastre rotinas no Planejamento', prova:'As missões aparecerão aqui automaticamente.', tempoEstimado:5, status:'pendente' }]).map(m => {
+                const meta = statusMeta(m.status);
+                return <div key={m.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', background:C.bg, border:`1px solid ${C.border}`, borderRadius:13, padding:'10px 12px' }}>
+                  <div>
+                    <div style={{ color:C.text, fontSize:13, fontWeight:900 }}>{m.titulo}</div>
+                    <div style={{ color:C.textMuted, fontSize:11, marginTop:3 }}>{m.prova || 'Sem prova definida'}</div>
+                  </div>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ color:C.textMuted, fontSize:10 }}>{m.tempoEstimado || m.timer_used_minutes || 25} min</div>
+                    <div style={{ color:meta.color, fontSize:11, fontWeight:900, marginTop:3 }}>{meta.icon} {meta.pct}%</div>
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            <div style={{ background:`${C.accent}10`, border:`1px solid ${C.accent}44`, borderRadius:18, padding:14 }}>
+              <Label text="FOCO DO DIA" color={C.accent} />
+              <div style={{ color:C.text, fontSize:14, fontWeight:900, lineHeight:1.35 }}>{foco?.titulo || 'Criar uma missão real para hoje'}</div>
+              <div style={{ color:C.textMuted, fontSize:11, marginTop:6 }}>{foco?.prova || 'Sem desculpas: defina uma tarefa pequena e executável.'}</div>
+            </div>
+            <div style={{ background:`${C.gold}10`, border:`1px solid ${C.gold}44`, borderRadius:18, padding:14 }}>
+              <Label text="ANTÍDOTO DO DIA" color={C.gold} />
+              <div style={{ color:C.text, fontSize:13, fontWeight:800, lineHeight:1.45 }}>“{antidoto}”</div>
+            </div>
+            <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:18, padding:14 }}>
+              <Label text="MÉTRICAS" color={C.gold} />
+              {[['Sequência atual', `${state.streak || 0} dias`], ['Projetos ativos', projects.length], ['Rotinas semanais', projects.reduce((a,p)=>a+(p.rotinas?.length||0),0)], ['Blocos no cronograma', totalSchedule]].map(([k,v]) => <div key={k} style={{ display:'flex', justifyContent:'space-between', color:C.text, fontSize:11, marginTop:7 }}><span>{k}</span><b style={{ color:C.gold }}>{v}</b></div>)}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -820,15 +885,27 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
 
   const pColor = activeProject.color || C.accent;
   const missions = (state.missions || []).filter(m => m.project_id === activeProject.id);
-  const activeMission = missions.find(m => m.status !== 'done');
+  const activeMission = missions.find(m => !isMissionClosed(m.status));
   const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
-  const completedMissions = missions.filter(m => m.status === 'done' && m.completed_at?.startsWith(todayStr));
+  const completedMissions = missions.filter(m => isMissionClosed(m.status) && m.completed_at?.startsWith(todayStr));
 
   const FUGAS = [
     { id: 'infinito', label: 'Planejamento Infinito', acao: 'A clareza vem da prática. Execute 5 minutos agora.' },
     { id: 'perfeccionismo', label: 'Perfeccionismo', acao: 'O feito é melhor que o perfeito. Conclua uma versão simplificada imediatamente.' },
     { id: 'distracao', label: 'Distração / Rede Social', acao: 'Feche todas as abas extras e foque no próximo passo simples.' }
   ];
+
+  useEffect(() => {
+    const routinesToday = getProjectRoutinesForToday(activeProject);
+    if (!routinesToday.length) return;
+    const existingIds = new Set((state.missions || []).filter(m => m.project_id === activeProject.id && m.created_at?.startsWith(todayStr)).map(m => m.rotinaId || m.id));
+    const generated = routinesToday
+      .filter(r => !existingIds.has(r.id))
+      .map(r => buildMissionFromRoutine(r, activeProject, todayStr));
+    if (!generated.length) return;
+    setState(s => ({ ...s, missions: [...(s.missions || []), ...generated], flags: { ...s.flags, missao: true } }));
+    triggerToast(`${generated.length} missão(ões) automática(s) gerada(s) para hoje.`, 'success');
+  }, [activeProject.id, JSON.stringify(activeProject.rotinas || []), todayStr]);
 
   const handleAjudaAction = (type) => {
     setHelpOpen(false);
@@ -896,13 +973,13 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
     triggerToast(`Timer configurado para ${m} min.`, 'info');
   };
 
-  const handleCompleteMission = () => {
+  const handleCompleteMission = (status = 'done') => {
     if (!activeMission) return;
     setTimerRunning(false);
     setTimeLeft(activeProject.defaultTimer || 1500);
     setState(s => {
       const current = s.missions || [];
-      const updated = current.map(m => (m.project_id === activeProject.id && m.status !== 'done') ? { ...m, status: 'done', completed_at: new Date().toISOString() } : m);
+      const updated = current.map(m => (m.project_id === activeProject.id && m.status !== 'done') ? { ...m, status, statusConclusao: statusMeta(status).pct, completed_at: new Date().toISOString() } : m);
       
       // Update statistics of corresponding roadmap item if any
       const matchingRoadmapIndex = activeProject.roadmap ? activeProject.roadmap.findIndex(item => item.title.toLowerCase() === activeMission.titulo.toLowerCase() && item.status !== 'completed') : -1;
@@ -926,17 +1003,20 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
         streak: s.flags.naoZerou ? s.streak : s.streak + 1
       };
     });
-    triggerToast('Missão concluída! +3 pts', 'success');
+    triggerToast(`Execução registrada: ${statusMeta(status).label}`, status === 'skipped' ? 'warning' : 'success');
   };
 
   const confirmMission = () => {
     if (!mTitulo.trim() || !mProva.trim()) return;
     const areaObj = LIFE_AREAS.find(a => a.key === mArea);
     const newMission = {
+      id: 'manual-' + Date.now(),
       titulo: mTitulo.trim(),
       prova: mProva.trim(),
       area: mArea,
       status: 'pendente',
+      statusConclusao: 0,
+      tempoEstimado: Math.round((activeProject.defaultTimer || 1500) / 60),
       project_id: activeProject.id,
       created_at: new Date().toISOString()
     };
@@ -1083,7 +1163,9 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
                 </div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                   <Btn label={timerRunning ? "PAUSAR ⏱️" : "INICIAR ⚡"} variant={timerRunning ? "secondary" : "primary"} onClick={toggleTimer} activeColor={pColor} />
-                  <Btn label="CONCLUÍDO" variant="success" onClick={handleCompleteMission} activeColor={pColor} />
+                  <Btn label="0%" variant="secondary" onClick={() => handleCompleteMission('skipped')} activeColor={pColor} />
+                  <Btn label="50%" variant="secondary" onClick={() => handleCompleteMission('partial')} activeColor={pColor} />
+                  <Btn label="100%" variant="success" onClick={() => handleCompleteMission('done')} activeColor={pColor} />
                 </div>
               </div>
 
@@ -1210,9 +1292,9 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Concluída | Prova: {m.prova}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{statusMeta(m.status).label} ({m.statusConclusao ?? statusMeta(m.status).pct}%) | Prova: {m.prova}</div>
                   </div>
-                  <div style={{ color: C.success, fontSize: 11, fontWeight: 'bold' }}>✓ +3 pts</div>
+                  <div style={{ color: statusMeta(m.status).color, fontSize: 11, fontWeight: 'bold' }}>{statusMeta(m.status).icon} {m.statusConclusao ?? statusMeta(m.status).pct}%</div>
                 </div>
               );
             })}
@@ -1254,7 +1336,119 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
   );
 }
 
-// ─── ABA 2: ROADMAP ───
+
+// ─── ABA 2: PLANEJAMENTO (PROGRAMAS + ROTINAS) ───
+function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
+  const pColor = activeProject.color || C.accent;
+  const [nome, setNome] = useState(activeProject.programaNome || activeProject.name || '');
+  const [dataInicio, setDataInicio] = useState(activeProject.dataInicio || new Date().toISOString().split('T')[0]);
+  const [dataFim, setDataFim] = useState(activeProject.dataFim || '');
+  const [diaSemana, setDiaSemana] = useState('segunda');
+  const [tarefaDescricao, setTarefaDescricao] = useState('');
+  const [detalhes, setDetalhes] = useState('');
+  const [tempoEstimado, setTempoEstimado] = useState('25');
+  const rotinas = activeProject.rotinas || [];
+
+  const salvarPrograma = () => {
+    if (!nome.trim()) return;
+    setState(s => ({
+      ...s,
+      projects: (s.projects || []).map(p => p.id === activeProject.id ? {
+        ...p,
+        programaNome: nome.trim(),
+        dataInicio,
+        dataFim: dataFim || p.dataFim || '',
+        ativo: true
+      } : p)
+    }));
+    triggerToast('Programa salvo.', 'success');
+  };
+
+  const adicionarRotina = () => {
+    if (!tarefaDescricao.trim()) return;
+    const nova = {
+      id: 'rotina-' + Date.now(),
+      diaSemana,
+      tarefaDescricao: tarefaDescricao.trim(),
+      detalhes: detalhes.trim(),
+      tempoEstimado: parseInt(tempoEstimado) || 25,
+      ativo: true,
+      created_at: new Date().toISOString()
+    };
+    setState(s => ({
+      ...s,
+      projects: (s.projects || []).map(p => p.id === activeProject.id ? { ...p, rotinas: [...(p.rotinas || []), nova] } : p)
+    }));
+    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25');
+    triggerToast('Rotina adicionada. Ela gera missão automaticamente no dia certo.', 'success');
+  };
+
+  const removerRotina = (id) => {
+    if (!window.confirm('Remover esta rotina?')) return;
+    setState(s => ({
+      ...s,
+      projects: (s.projects || []).map(p => p.id === activeProject.id ? { ...p, rotinas: (p.rotinas || []).filter(r => r.id !== id) } : p)
+    }));
+  };
+
+  const gerarHoje = () => {
+    const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const routinesToday = getProjectRoutinesForToday(activeProject);
+    const existing = new Set((state.missions || []).filter(m => m.project_id === activeProject.id && m.created_at?.startsWith(todayStr)).map(m => m.rotinaId || m.id));
+    const generated = routinesToday.filter(r => !existing.has(r.id)).map(r => buildMissionFromRoutine(r, activeProject, todayStr));
+    if (!generated.length) { triggerToast('Nenhuma missão nova para gerar hoje.', 'info'); return; }
+    setState(s => ({ ...s, missions: [...(s.missions || []), ...generated], flags: { ...s.flags, missao: true } }));
+    triggerToast(`${generated.length} missão(ões) gerada(s) para hoje.`, 'success');
+  };
+
+  return (
+    <div style={{ padding: '0 16px 100px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+        <Label text="🧭 PROGRAMA" color={pColor} />
+        <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5, marginBottom: 12 }}>Defina o programa principal deste projeto. Ex.: OAB 6 meses, Treino anual, Devocional, ComprasOps.</div>
+        <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do programa" style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:10 }} />
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+          <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+          <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+        </div>
+        <Btn label="SALVAR PROGRAMA" onClick={salvarPrograma} activeColor={pColor} full />
+      </div>
+
+      <div style={{ background: C.surface, border: `1px solid ${pColor}55`, borderRadius: 14, padding: 16 }}>
+        <Label text="📅 NOVA ROTINA SEMANAL" color={pColor} />
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 90px', gap:10, marginBottom:10 }}>
+          <select value={diaSemana} onChange={e => setDiaSemana(e.target.value)} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }}>
+            {WEEK_DAYS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+          </select>
+          <input type="number" value={tempoEstimado} onChange={e => setTempoEstimado(e.target.value)} placeholder="min" style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+        </div>
+        <input value={tarefaDescricao} onChange={e => setTarefaDescricao(e.target.value)} placeholder="Tarefa: Constitucional + 30 questões" style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:10 }} />
+        <textarea value={detalhes} onChange={e => setDetalhes(e.target.value)} placeholder="Detalhes/prova de conclusão" rows={2} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:12, fontFamily:'inherit' }} />
+        <Btn label="ADICIONAR ROTINA" onClick={adicionarRotina} activeColor={pColor} full />
+      </div>
+
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'center', marginBottom:12 }}>
+          <Label text={`ROTINAS (${rotinas.length})`} color={pColor} />
+          <Btn label="GERAR HOJE" small onClick={gerarHoje} activeColor={pColor} />
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {rotinas.map(r => <div key={r.id} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:12, display:'flex', justifyContent:'space-between', gap:12 }}>
+            <div>
+              <div style={{ fontSize:10, color:pColor, fontFamily:'monospace', fontWeight:800 }}>{(WEEK_DAYS.find(d => d.key === r.diaSemana)?.label || r.diaSemana)} • {r.tempoEstimado || 25} MIN</div>
+              <div style={{ fontSize:13, color:C.text, fontWeight:800, marginTop:3 }}>{r.tarefaDescricao}</div>
+              {r.detalhes && <div style={{ fontSize:11, color:C.textMuted, marginTop:3 }}>{r.detalhes}</div>}
+            </div>
+            <button onClick={() => removerRotina(r.id)} style={{ background:'transparent', border:'none', color:C.critical, fontSize:16, cursor:'pointer' }}>×</button>
+          </div>)}
+          {!rotinas.length && <div style={{ border:`1px dashed ${C.border}`, borderRadius:12, padding:20, textAlign:'center', color:C.textMuted, fontSize:11 }}>Nenhuma rotina ainda. Cadastre a agenda semanal para o app gerar missões sozinho.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ABA 2B: ROADMAP ───
 function ProjectRoadmap({ state, setState, activeProject, triggerToast }) {
   const [showEditor, setShowEditor] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2213,6 +2407,8 @@ export default function App() {
       { id: 3, titulo: 'Passei em 3 disciplinas de Direito', cat: 'Estudo', desc: 'Foco intelectual concentrado e produtividade.' }
     ],
     constitutionChecks: {},
+    programas: [],
+    execucoes: [],
   });
 
   // Global Timer States
@@ -2253,6 +2449,8 @@ export default function App() {
 
   const migrateLegacyState = (parsed) => {
     if (!parsed) return parsed;
+    parsed.programas = parsed.programas || [];
+    parsed.execucoes = parsed.execucoes || [];
     
     // Convert empresa to carreira panel area
     if (parsed.panel && parsed.panel.empresa !== undefined && parsed.panel.carreira === undefined) {
@@ -2682,7 +2880,7 @@ export default function App() {
           <div style={{ display: 'flex', height: '100%' }}>
             {[
               { id: 'hoje', icon: '⚡', l: 'HOJE' },
-              { id: 'roadmap', icon: '📍', l: 'ROADMAP' },
+              { id: 'planejamento', icon: '🧭', l: 'PLANEJAMENTO' },
               { id: 'evolucao', icon: '📈', l: 'EVOLUÇÃO' },
               { id: 'anotacoes', icon: '📝', l: 'NOTAS' }
             ].map(t => {
@@ -2792,8 +2990,8 @@ export default function App() {
               <ProjectHoje state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast}
                 timeLeft={timeLeft} setTimeLeft={setTimeLeft} timerRunning={timerRunning} setTimerRunning={setTimerRunning} formatTime={formatTime} />
             )}
-            {projectTab === 'roadmap' && (
-              <ProjectRoadmap state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast} />
+            {projectTab === 'planejamento' && (
+              <ProjectPlanejamento state={state} setState={setState} activeProject={activeProject} triggerToast={triggerToast} />
             )}
             {projectTab === 'evolucao' && (
               <ProjectEvolucao state={state} activeProject={activeProject} triggerToast={triggerToast} />
