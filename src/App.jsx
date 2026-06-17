@@ -232,6 +232,8 @@ const buildMissionFromRoutine = (routine, project, todayStr) => ({
   status: 'pendente',
   statusConclusao: 0,
   tempoEstimado: routine.tempoEstimado || 25,
+  horaInicio: routine.horaInicio || null,
+  horaFim: routine.horaFim || null,
   rotinaId: routine.id,
   project_id: project.id,
   created_at: `${todayStr}T00:00:00.000Z`,
@@ -486,7 +488,10 @@ function ComandoCentralOverview({ state, score }) {
                 return <div key={m.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', background:C.bg, border:`1px solid ${C.border}`, borderRadius:13, padding:'10px 12px' }}>
                   <div>
                     <div style={{ color:C.text, fontSize:13, fontWeight:900 }}>{m.titulo}</div>
-                    <div style={{ color:C.textMuted, fontSize:11, marginTop:3 }}>{m.prova || 'Sem prova definida'}</div>
+                    <div style={{ color:C.textMuted, fontSize:11, marginTop:3 }}>
+                      {m.horaInicio && m.horaFim ? `🕒 ${m.horaInicio} - ${m.horaFim} | ` : ''}
+                      {m.prova || 'Sem prova definida'}
+                    </div>
                   </div>
                   <div style={{ textAlign:'right' }}>
                     <div style={{ color:C.textMuted, fontSize:10 }}>{m.tempoEstimado || m.timer_used_minutes || 25} min</div>
@@ -877,6 +882,8 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
   const [mTitulo, setMTitulo] = useState('');
   const [mProva, setMProva] = useState('');
   const [mArea, setMArea] = useState('estudo');
+  const [mHoraInicio, setMHoraInicio] = useState('');
+  const [mHoraFim, setMHoraFim] = useState('');
   
   const [helpOpen, setHelpOpen] = useState(false);
   const [travarMicro, setTravarMicro] = useState(false);
@@ -1009,6 +1016,18 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
   const confirmMission = () => {
     if (!mTitulo.trim() || !mProva.trim()) return;
     const areaObj = LIFE_AREAS.find(a => a.key === mArea);
+
+    let calcTempo = Math.round((activeProject.defaultTimer || 1500) / 60);
+    if (mHoraInicio && mHoraFim) {
+      const [hIni, mIni] = mHoraInicio.split(':').map(Number);
+      const [hFim, mFim] = mHoraFim.split(':').map(Number);
+      if (!isNaN(hIni) && !isNaN(mIni) && !isNaN(hFim) && !isNaN(mFim)) {
+        let diffMins = (hFim * 60 + mFim) - (hIni * 60 + mIni);
+        if (diffMins < 0) diffMins += 24 * 60;
+        calcTempo = diffMins;
+      }
+    }
+
     const newMission = {
       id: 'manual-' + Date.now(),
       titulo: mTitulo.trim(),
@@ -1016,7 +1035,9 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
       area: mArea,
       status: 'pendente',
       statusConclusao: 0,
-      tempoEstimado: Math.round((activeProject.defaultTimer || 1500) / 60),
+      tempoEstimado: calcTempo,
+      horaInicio: mHoraInicio || null,
+      horaFim: mHoraFim || null,
       project_id: activeProject.id,
       created_at: new Date().toISOString()
     };
@@ -1028,7 +1049,7 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
         flags: { ...s.flags, missao: true }
       };
     });
-    setShowModal(false); setMTitulo(''); setMProva(''); setMArea('estudo');
+    setShowModal(false); setMTitulo(''); setMProva(''); setMArea('estudo'); setMHoraInicio(''); setMHoraFim('');
     setTimeLeft(activeProject.defaultTimer || 1500);
     triggerToast('Missão criada! +2 pts', 'success');
   };
@@ -1056,6 +1077,17 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
             <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 6 }}>COMO SABEREI QUE FOI FEITO? (PROVA)</div>
             <input value={mProva} onChange={e => setMProva(e.target.value)} placeholder="Ex: Resolver 15 questões e resumo feito"
               style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 6 }}>HORA INÍCIO</div>
+                <input type="time" value={mHoraInicio} onChange={e => setMHoraInicio(e.target.value)} style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 6 }}>HORA FIM</div>
+                <input type="time" value={mHoraFim} onChange={e => setMHoraFim(e.target.value)} style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', color: C.text, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+            </div>
 
             <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em', marginBottom: 8 }}>ÁREA DA VIDA</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
@@ -1151,6 +1183,15 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
                     </span>
                   );
                 })()}
+                {activeMission.horaInicio && activeMission.horaFim && (
+                  <span style={{
+                    fontSize: 9, fontFamily: 'monospace', color: pColor, fontWeight: 'bold',
+                    background: `${pColor}15`, border: `1.2px solid ${pColor}33`, borderRadius: 6,
+                    padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4
+                  }}>
+                    🕒 {activeMission.horaInicio} - {activeMission.horaFim}
+                  </span>
+                )}
               </div>
 
               <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20 }}>
@@ -1292,7 +1333,10 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{statusMeta(m.status).label} ({m.statusConclusao ?? statusMeta(m.status).pct}%) | Prova: {m.prova}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>
+                      {m.horaInicio && m.horaFim ? `🕒 ${m.horaInicio} - ${m.horaFim} | ` : ''}
+                      {statusMeta(m.status).label} ({m.statusConclusao ?? statusMeta(m.status).pct}%) | Prova: {m.prova}
+                    </div>
                   </div>
                   <div style={{ color: statusMeta(m.status).color, fontSize: 11, fontWeight: 'bold' }}>{statusMeta(m.status).icon} {m.statusConclusao ?? statusMeta(m.status).pct}%</div>
                 </div>
@@ -1315,7 +1359,10 @@ function ProjectHoje({ state, setState, activeProject, triggerToast, timeLeft, s
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Em andamento...</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>
+                      {activeMission.horaInicio && activeMission.horaFim ? `🕒 ${activeMission.horaInicio} - ${activeMission.horaFim} | ` : ''}
+                      Em andamento...
+                    </div>
                   </div>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: pColor, animation: 'blinking 1.5s infinite' }} />
                 </div>
@@ -1347,7 +1394,21 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
   const [tarefaDescricao, setTarefaDescricao] = useState('');
   const [detalhes, setDetalhes] = useState('');
   const [tempoEstimado, setTempoEstimado] = useState('25');
+  const [horaInicio, setHoraInicio] = useState('');
+  const [horaFim, setHoraFim] = useState('');
   const rotinas = activeProject.rotinas || [];
+
+  useEffect(() => {
+    if (horaInicio && horaFim) {
+      const [hIni, mIni] = horaInicio.split(':').map(Number);
+      const [hFim, mFim] = horaFim.split(':').map(Number);
+      if (!isNaN(hIni) && !isNaN(mIni) && !isNaN(hFim) && !isNaN(mFim)) {
+        let diffMins = (hFim * 60 + mFim) - (hIni * 60 + mIni);
+        if (diffMins < 0) diffMins += 24 * 60;
+        setTempoEstimado(diffMins.toString());
+      }
+    }
+  }, [horaInicio, horaFim]);
 
   const salvarPrograma = () => {
     if (!nome.trim()) return;
@@ -1372,6 +1433,8 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
       tarefaDescricao: tarefaDescricao.trim(),
       detalhes: detalhes.trim(),
       tempoEstimado: parseInt(tempoEstimado) || 25,
+      horaInicio: horaInicio || null,
+      horaFim: horaFim || null,
       ativo: true,
       created_at: new Date().toISOString()
     };
@@ -1379,7 +1442,7 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
       ...s,
       projects: (s.projects || []).map(p => p.id === activeProject.id ? { ...p, rotinas: [...(p.rotinas || []), nova] } : p)
     }));
-    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25');
+    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25'); setHoraInicio(''); setHoraFim('');
     triggerToast('Rotina adicionada. Ela gera missão automaticamente no dia certo.', 'success');
   };
 
@@ -1416,11 +1479,25 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
 
       <div style={{ background: C.surface, border: `1px solid ${pColor}55`, borderRadius: 14, padding: 16 }}>
         <Label text="📅 NOVA ROTINA SEMANAL" color={pColor} />
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 90px', gap:10, marginBottom:10 }}>
-          <select value={diaSemana} onChange={e => setDiaSemana(e.target.value)} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }}>
-            {WEEK_DAYS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
-          </select>
-          <input type="number" value={tempoEstimado} onChange={e => setTempoEstimado(e.target.value)} placeholder="min" style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(100px, 1fr))', gap:10, marginBottom:10 }}>
+          <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>DIA</div>
+            <select value={diaSemana} onChange={e => setDiaSemana(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }}>
+              {WEEK_DAYS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>HORA INÍCIO</div>
+            <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>HORA FIM</div>
+            <input type="time" value={horaFim} onChange={e => setHoraFim(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>DUR (MIN)</div>
+            <input type="number" value={tempoEstimado} onChange={e => setTempoEstimado(e.target.value)} placeholder="min" style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+          </div>
         </div>
         <input value={tarefaDescricao} onChange={e => setTarefaDescricao(e.target.value)} placeholder="Tarefa: Constitucional + 30 questões" style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:10 }} />
         <textarea value={detalhes} onChange={e => setDetalhes(e.target.value)} placeholder="Detalhes/prova de conclusão" rows={2} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, marginBottom:12, fontFamily:'inherit' }} />
@@ -1435,7 +1512,11 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {rotinas.map(r => <div key={r.id} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:12, display:'flex', justifyContent:'space-between', gap:12 }}>
             <div>
-              <div style={{ fontSize:10, color:pColor, fontFamily:'monospace', fontWeight:800 }}>{(WEEK_DAYS.find(d => d.key === r.diaSemana)?.label || r.diaSemana)} • {r.tempoEstimado || 25} MIN</div>
+              <div style={{ fontSize:10, color:pColor, fontFamily:'monospace', fontWeight:800 }}>
+                {(WEEK_DAYS.find(d => d.key === r.diaSemana)?.label || r.diaSemana)}
+                {r.horaInicio && r.horaFim ? ` • 🕒 ${r.horaInicio} - ${r.horaFim}` : ''}
+                {` • ${r.tempoEstimado || 25} MIN`}
+              </div>
               <div style={{ fontSize:13, color:C.text, fontWeight:800, marginTop:3 }}>{r.tarefaDescricao}</div>
               {r.detalhes && <div style={{ fontSize:11, color:C.textMuted, marginTop:3 }}>{r.detalhes}</div>}
             </div>
