@@ -2802,16 +2802,23 @@ export default function App() {
     return `${m}:${s}`;
   };
 
-  // Sync Timer settings on project change
+  const projMissions = (state.missions || []).filter(m => m.project_id === state.activeProjectId);
+  const actMission = projMissions.find(m => !isMissionClosed(m.status));
+  const actMissionId = actMission?.id || null;
+  const actMissionTempo = actMission?.tempoEstimado || null;
+
+  // Sync Timer settings on project change or active mission change
   useEffect(() => {
     if (activeProject) {
-      if (timerProjectId !== activeProject.id) {
-        setTimerProjectId(activeProject.id);
-        setTimeLeft(activeProject.defaultTimer || 1500);
-        setTimerRunning(false);
+      let targetSeconds = activeProject.defaultTimer || 1500;
+      if (actMission && actMission.tempoEstimado) {
+        targetSeconds = actMission.tempoEstimado * 60;
       }
+      setTimerProjectId(activeProject.id);
+      setTimeLeft(targetSeconds);
+      setTimerRunning(false);
     }
-  }, [state.activeProjectId, activeProject]);
+  }, [state.activeProjectId, activeProject?.id, activeProject?.defaultTimer, actMissionId, actMissionTempo]);
 
   if (loading) {
     return (
