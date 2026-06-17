@@ -2612,10 +2612,14 @@ export default function App() {
         }
 
         const localHistData = localStorage.getItem('guerreiro_history');
+        let hasLocalToday = false;
         if (localHistData) {
           try {
             const parsedHist = JSON.parse(localHistData);
-            if (parsedHist) setHistory(parsedHist);
+            if (parsedHist) {
+              setHistory(parsedHist);
+              hasLocalToday = parsedHist.some(h => h.date === todayStr);
+            }
           } catch (e) {
             console.error('LocalStorage history load err:', e);
           }
@@ -2647,8 +2651,8 @@ export default function App() {
           let loaded = data.state;
           loaded = migrateLegacyState(loaded);
           setState(prev => ({ ...prev, ...loaded }));
-        } else {
-          // New day load previous stats
+        } else if (!hasLocalToday) {
+          // New day load previous stats (only if we don't have today's state locally yet)
           const { data: prevData, error: prevError } = await supabase
             .from('guerreiro_daily_states')
             .select('date, state')
@@ -2906,22 +2910,18 @@ export default function App() {
           activeColor={pColor} />
       )}
 
-      {state.opState === 'fuga_90' && (() => {
-        const FUGAS = [
-          { id: 'infinito', label: 'Planejamento Infinito', acao: 'A clareza vem da prática. Execute 5 minutos agora.' },
-          { id: 'perfeccionismo', label: 'Perfeccionismo', acao: 'O feito é melhor que o perfeito. Conclua uma versão simplificada imediatamente.' },
-          { id: 'distracao', label: 'Distração / Rede Social', acao: 'Feche todas as abas extras e foque no próximo passo simples.' }
-        ];
-        const f = FUGAS.find(x => x.id === state.fugaTipo);
-        return (
-          <ActionBreathing duration={90}
-            onComplete={() => setState(s => ({ ...s, opState: null, fugaTipo: null }))}
-            onClose={() => setState(s => ({ ...s, opState: null, fugaTipo: null }))}
-            title="⚡ ANTÍDOTO DE DESVIO ACIONADO"
-            subtitle={`Correção: ${f ? f.acao : ''}`}
-            activeColor={pColor} />
-        );
-      })()}
+      {state.opState === 'fuga_90' && (
+        <ActionBreathing duration={90}
+          onComplete={() => setState(s => ({ ...s, opState: null, fugaTipo: null }))}
+          onClose={() => setState(s => ({ ...s, opState: null, fugaTipo: null }))}
+          title="⚡ ANTÍDOTO DE DESVIO ACIONADO"
+          subtitle={`Correção: ${
+            state.fugaTipo === 'infinito' ? 'A clareza vem da prática. Execute 5 minutos agora.' :
+            state.fugaTipo === 'perfeccionismo' ? 'O feito é melhor que o perfeito. Conclua uma versão simplificada imediatamente.' :
+            state.fugaTipo === 'distracao' ? 'Feche todas as abas extras e foque no próximo passo simples.' : ''
+          }`}
+          activeColor={pColor} />
+      )}
 
       {/* HEADER FIXO */}
       <div style={{
