@@ -2078,6 +2078,7 @@ function TabCronograma({state, setState, toast}) {
   const [roadmapId, setRoadmapId] = useState('');
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('06:00');
+  const [endTime, setEndTime] = useState('07:00');
   const [days, setDays] = useState([0,1,2,3,4]);
   const [showCelebration, setShowCelebration] = useState(false);
 
@@ -2102,7 +2103,7 @@ function TabCronograma({state, setState, toast}) {
       titulo: item.title || roadmap?.title || project?.name || 'Bloco sem nome',
       detalhe: project ? `${project.name}${roadmap?.title ? ' → ' + roadmap.title : ''}` : 'Projeto removido'
     };
-  }).sort((a,b) => (a.time || '').localeCompare(b.time || ''));
+  }).sort((a,b) => (a.time || '').localeCompare(b.time || '') || (a.endTime || '').localeCompare(b.endTime || ''));
 
   const totalSlots = enrichedSchedule.reduce((sum, item) => sum + (item.days || []).length, 0);
   const totalDone = enrichedSchedule.reduce((sum, item) => sum + (item.days || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
@@ -2133,6 +2134,8 @@ function TabCronograma({state, setState, toast}) {
     const project = selectedProject;
     if (!project) { toast('Crie um projeto primeiro na aba RAMIFICAÇÕES.'); return; }
     if (!days.length) { toast('Escolha pelo menos um dia da semana.'); return; }
+    if (!time || !endTime) { toast('Informe o horário de início e fim.'); return; }
+    if (endTime <= time) { toast('O horário final precisa ser depois do horário inicial.'); return; }
     const roadmap = (project.roadmap || []).find(r => r.id === roadmapId);
     const newItem = {
       id: 'sch-' + Date.now(),
@@ -2140,6 +2143,7 @@ function TabCronograma({state, setState, toast}) {
       roadmapId: roadmapId || null,
       title: title.trim() || roadmap?.title || project.name,
       time,
+      endTime,
       days,
       created_at: new Date().toISOString()
     };
@@ -2151,6 +2155,8 @@ function TabCronograma({state, setState, toast}) {
     setRoadmapId('');
     toast(`📅 Bloco criado no cronograma: ${newItem.title}`);
   };
+
+  const formatTimeRange = (item) => item.endTime ? `${item.time}–${item.endTime}` : item.time;
 
   const removeScheduleItem = (id) => {
     setState(s => {
@@ -2248,10 +2254,12 @@ function TabCronograma({state, setState, toast}) {
             {(selectedProject?.roadmap || []).map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
           </select>
         </div>
-        <div style={{display:'grid', gridTemplateColumns:'1fr 120px', gap:10, marginBottom:10}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 120px 120px', gap:10, marginBottom:10}}>
           <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Título do bloco. Ex.: Programar ComprasOps" style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}} />
-          <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}} />
+          <input type="time" aria-label="Horário inicial" title="Horário inicial" value={time} onChange={e=>setTime(e.target.value)} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}} />
+          <input type="time" aria-label="Horário final" title="Horário final" value={endTime} onChange={e=>setEndTime(e.target.value)} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12}} />
         </div>
+        <div style={{fontSize:9, color:C.textMuted, fontFamily:'monospace', margin:'-4px 0 10px', textAlign:'right'}}>Ex.: 21:00 até 22:00</div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:6, marginBottom:12}}>
           {CRONOGRAMA_DIAS.map((d, i) => <button key={d} onClick={()=>toggleDay(i)} style={{border:`1px solid ${days.includes(i)?C.accent:C.border}`, background:days.includes(i)?`${C.accent}22`:'#111827', color:days.includes(i)?C.accent:C.textMuted, borderRadius:8, padding:'8px 4px', fontSize:10, fontWeight:800}}>{d}</button>)}
         </div>
@@ -2292,6 +2300,7 @@ function TabCronograma({state, setState, toast}) {
                             <span style={{fontSize:9, fontFamily:'monospace', fontWeight:900, color:done?item.pilar.cor:C.text}}>{item.titulo}</span>
                             <span style={{fontSize:13}}>{done?'✅':item.pilar.icon}</span>
                           </div>
+                          <div style={{fontSize:8, color:item.pilar.cor, fontWeight:900, fontFamily:'monospace', marginTop:4}}>⏰ {formatTimeRange(item)}</div>
                           <div style={{fontSize:8.5, color:C.textMuted, lineHeight:1.35, marginTop:4}}>{item.detalhe}</div>
                           <button onClick={(e)=>{e.stopPropagation(); removeScheduleItem(item.id);}} style={{marginTop:5, background:'transparent', border:'none', color:C.textMuted, fontSize:8, padding:0, cursor:'pointer'}}>remover</button>
                         </div>;
