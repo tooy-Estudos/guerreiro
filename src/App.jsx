@@ -413,7 +413,7 @@ function SpotlightCard({ children, style = {}, className = "" }) {
   );
 }
 
-function ComandoCentralOverview({ state, score }) {
+function ComandoCentralOverview({ state, score, selectedPillarFilter, onPillarFilter }) {
   const projects = state.projects || [];
   const missions = state.missions || [];
   const scheduleItems = state.cronograma?.items || [];
@@ -462,7 +462,24 @@ function ComandoCentralOverview({ state, score }) {
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0,1fr))', gap:10, marginBottom:16 }} className="pillar-grid">
-          {pillarStats.map(p => <div key={p.id} style={{ background:C.surface, border:`1px solid ${p.cor}44`, borderRadius:18, padding:13, minHeight:124 }}>
+          {pillarStats.map(p => {
+            const isSelected = selectedPillarFilter === p.id;
+            return <button
+              key={p.id}
+              type="button"
+              onClick={() => onPillarFilter?.(p.id)}
+              title={`Filtrar projetos de ${p.nome}`}
+              style={{
+                background: isSelected ? `${p.cor}18` : C.surface,
+                border:`1.5px solid ${isSelected ? p.cor : `${p.cor}44`}`,
+                borderRadius:18,
+                padding:13,
+                minHeight:124,
+                textAlign:'left',
+                cursor:'pointer',
+                boxShadow: isSelected ? `0 0 0 2px ${p.cor}22, 0 14px 34px #0006` : 'none'
+              }}
+            >
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}><span style={{ fontSize:22 }}>{p.icon}</span><b style={{ color:C.text, fontSize:13 }}>{p.nome}</b></div>
               <b style={{ color:p.cor, fontSize:18 }}>{p.pct}%</b>
@@ -473,7 +490,9 @@ function ComandoCentralOverview({ state, score }) {
               <div><b style={{ color:C.text }}>{p.total || p.projects.length}</b><br/>Planejado</div>
               <div><b style={{ color:C.text }}>{p.done}</b><br/>Executado</div>
             </div>
-          </div>)}
+            <div style={{ marginTop:10, color:p.cor, fontSize:9, fontWeight:900, letterSpacing:'.08em' }}>{isSelected ? 'FILTRO ATIVO' : p.projects.length === 1 ? 'ENTRAR NO PROJETO →' : `VER ${p.projects.length} PROJETO(S) →`}</div>
+          </button>;
+          })}
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1.3fr) minmax(260px,.7fr)', gap:14 }} className="command-grid">
@@ -526,6 +545,7 @@ function ComandoCentralOverview({ state, score }) {
 // ─── DASHBOARD PRINCIPAL ───
 function DashboardMain({ state, setState, triggerToast, score, classObj }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedPillarFilter, setSelectedPillarFilter] = useState(null);
   const [projName, setProjName] = useState('');
   const [projDesc, setProjDesc] = useState('');
   const [projEmoji, setProjEmoji] = useState('📚');
@@ -540,6 +560,37 @@ function DashboardMain({ state, setState, triggerToast, score, classObj }) {
   const [editAction, setEditAction] = useState('');
 
   const EMOJIS = ['📚', '📱', '🏋️', '💼', '🎯', '🎨', '🚀', '❤️', '💡', '🔥'];
+
+  const matchesProjectPillar = (project, pillarId) => {
+    if (!pillarId) return true;
+    const pillar = COMANDO_PILARES.find(p => p.id === pillarId);
+    if (!pillar) return true;
+    const values = [project.pilar, project.pilarId, project.area, project.objective]
+      .filter(Boolean)
+      .map(v => String(v).toLowerCase());
+    return values.some(v => v === pillar.id || v === pillar.nome.toLowerCase() || pillar.aliases.includes(v));
+  };
+
+  const filteredProjects = (state.projects || []).filter(project => matchesProjectPillar(project, selectedPillarFilter));
+  const selectedPillar = COMANDO_PILARES.find(p => p.id === selectedPillarFilter);
+
+  const handleDashboardPillarFilter = (pillarId) => {
+    const pillar = COMANDO_PILARES.find(p => p.id === pillarId);
+    const matchingProjects = (state.projects || []).filter(project => matchesProjectPillar(project, pillarId));
+
+    // Clique no pilar NUNCA cria projeto. Ele só entra em projeto existente
+    // quando há um único resultado; quando há vários, funciona como filtro.
+    if (matchingProjects.length === 1) {
+      setSelectedPillarFilter(null);
+      setState(s => ({ ...s, activeProjectId: matchingProjects[0].id }));
+      triggerToast(`Abrindo ${matchingProjects[0].name}.`, 'info');
+      return;
+    }
+
+    const nextFilter = selectedPillarFilter === pillarId ? null : pillarId;
+    setSelectedPillarFilter(nextFilter);
+    triggerToast(nextFilter ? `${pillar?.nome || 'Pilar'}: escolha um dos ${matchingProjects.length} projeto(s) existentes.` : 'Filtro removido.', 'info');
+  };
 
   const handleCreateProject = () => {
     if (!projName.trim()) return;
@@ -611,7 +662,7 @@ function DashboardMain({ state, setState, triggerToast, score, classObj }) {
   return (
     <div className="two-col-grid" style={{ padding: '20px 16px 100px' }}>
       <div className="full-width-col">
-        <ComandoCentralOverview state={state} score={score} />
+        <ComandoCentralOverview state={state} score={score} selectedPillarFilter={selectedPillarFilter} onPillarFilter={handleDashboardPillarFilter} />
       </div>
       
       {/* SEÇÃO METAS GERAIS DO DIA */}
@@ -639,14 +690,21 @@ function DashboardMain({ state, setState, triggerToast, score, classObj }) {
       {/* COLUNA DA ESQUERDA: LISTA DE PROJETOS */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Label text="📂 PROJETOS ATIVOS" color={C.accent} />
+          <Label text={selectedPillar ? `📂 PROJETOS — ${selectedPillar.nome}` : '📂 PROJETOS ATIVOS'} color={selectedPillar?.cor || C.accent} />
           <button onClick={() => setShowCreateModal(true)} style={{
             background: 'none', border: 'none', color: C.accent, fontWeight: 'bold', fontSize: 12, cursor: 'pointer'
           }}>➕ NOVO PROJETO</button>
         </div>
 
+        {selectedPillar && (
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, background:`${selectedPillar.cor}12`, border:`1px solid ${selectedPillar.cor}44`, borderRadius:10, padding:'9px 11px', color:C.text, fontSize:11 }}>
+            <span><b style={{ color:selectedPillar.cor }}>{selectedPillar.icon} {selectedPillar.nome}</b> filtrando projetos existentes</span>
+            <button type="button" onClick={() => setSelectedPillarFilter(null)} style={{ background:'transparent', border:`1px solid ${selectedPillar.cor}66`, color:selectedPillar.cor, borderRadius:6, padding:'3px 8px', fontSize:10, fontWeight:900, cursor:'pointer' }}>LIMPAR</button>
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {(state.projects || []).map(p => {
+          {filteredProjects.map(p => {
             const projMissions = (state.missions || []).filter(m => m.project_id === p.id);
             const compMissions = projMissions.filter(m => m.status === 'done');
             
@@ -702,9 +760,9 @@ function DashboardMain({ state, setState, triggerToast, score, classObj }) {
             );
           })}
 
-          {(state.projects || []).length === 0 && (
+          {filteredProjects.length === 0 && (
             <div style={{ textTransform: 'uppercase', textAlign: 'center', fontSize: 11, color: C.textMuted, fontFamily: 'monospace', padding: '40px 0', border: `1px dashed ${C.border}`, borderRadius: 12 }}>
-              Nenhum projeto ativo. Clique em Novo Projeto para iniciar.
+              {selectedPillar ? `Nenhum projeto existente em ${selectedPillar.nome}. Use o botão Novo Projeto abaixo apenas se quiser cadastrar um projeto novo.` : 'Nenhum projeto ativo. Use Novo Projeto para iniciar.'}
             </div>
           )}
         </div>
