@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, Component } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
+const AUTH_CONFIG = {
+  username: (import.meta.env.VITE_LOGIN_USER || import.meta.env.VITE_APP_USER || "admin").trim(),
+  password: import.meta.env.VITE_LOGIN_PASSWORD || import.meta.env.VITE_APP_PASSWORD || "123456",
+  label: import.meta.env.VITE_LOGIN_LABEL || "Administrador",
+  sessionHours: Number(import.meta.env.VITE_LOGIN_SESSION_HOURS) || 12
+};
+
+const AUTH_SESSION_KEY = "guerreiro_auth_session";
+
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -210,6 +219,21 @@ const WEEK_DAYS = [
 ];
 
 const normalizeWeekDay = (date = new Date()) => WEEK_DAYS[date.getDay()].key;
+const dateFromInput = (value) => {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+const weekDayFromInputDate = (value) => {
+  const parsed = dateFromInput(value);
+  return parsed ? normalizeWeekDay(parsed) : '';
+};
+const formatInputDateBR = (value) => {
+  const parsed = dateFromInput(value);
+  if (!parsed) return '';
+  return parsed.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
 const isMissionClosed = (status) => ['done', 'partial', 'skipped'].includes(status);
 
 const statusMeta = (status) => {
@@ -221,7 +245,12 @@ const statusMeta = (status) => {
 
 const getProjectRoutinesForToday = (project, date = new Date()) => {
   const day = normalizeWeekDay(date);
-  return (project?.rotinas || []).filter(r => r.diaSemana === day && r.ativo !== false);
+  const todayStr = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  return (project?.rotinas || []).filter(r => {
+    if (r.ativo === false) return false;
+    if (r.dataRotina) return r.dataRotina === todayStr;
+    return r.diaSemana === day;
+  });
 };
 
 const buildMissionFromRoutine = (routine, project, todayStr) => ({
@@ -234,6 +263,7 @@ const buildMissionFromRoutine = (routine, project, todayStr) => ({
   tempoEstimado: routine.tempoEstimado || 25,
   horaInicio: routine.horaInicio || null,
   horaFim: routine.horaFim || null,
+  dataRotina: routine.dataRotina || todayStr,
   rotinaId: routine.id,
   project_id: project.id,
   created_at: `${todayStr}T00:00:00.000Z`,
@@ -266,6 +296,82 @@ function Btn({ label, variant = 'primary', onClick, disabled, full, small, activ
       onMouseLeave={e => { if (!disabled) e.target.style.filter = 'none' }}>
       {label}
     </button>
+  );
+}
+
+function LoginScreen({ onLogin, isLoading, error }) {
+  const [user, setUser] = useState('');
+  const [password, setPassword] = useState('');
+  const canSubmit = user.trim() && password && !isLoading;
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    onLogin({ user: user.trim(), password });
+    setPassword('');
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: C.bg,
+      color: C.text,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      boxSizing: 'border-box'
+    }}>
+      <form onSubmit={submit} style={{
+        width: '100%',
+        maxWidth: 380,
+        background: 'linear-gradient(145deg, #111827, #0B0B0F)',
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: 24,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.45)'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ fontSize: 26, marginBottom: 6 }}>⚡</div>
+          <h1 style={{ fontSize: 20, letterSpacing: '0.06em', marginBottom: 4 }}>COMANDO CENTRAL</h1>
+          <p style={{ fontSize: 12, color: C.textMuted }}>Acesso restrito</p>
+        </div>
+
+        <label style={{ fontSize: 10, color: C.textMuted, fontFamily: 'monospace', textTransform: 'uppercase' }}>Usuário</label>
+        <input
+          value={user}
+          onChange={(e) => setUser(e.target.value)}
+          placeholder={AUTH_CONFIG.username}
+          autoComplete="username"
+          style={{ width: '100%', boxSizing: 'border-box', background: '#111827', border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: 12, margin: '6px 0 12px', outline: 'none' }}
+        />
+
+        <label style={{ fontSize: 10, color: C.textMuted, fontFamily: 'monospace', textTransform: 'uppercase' }}>Senha</label>
+        <input
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          type="password"
+          autoComplete="current-password"
+          placeholder="••••••••"
+          style={{ width: '100%', boxSizing: 'border-box', background: '#111827', border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: 12, margin: '6px 0 14px', outline: 'none' }}
+        />
+
+        {error && <div style={{ fontSize: 12, color: C.critical, marginBottom: 12, fontWeight: 700 }}>{error}</div>}
+
+        <Btn
+          label={isLoading ? 'ENTRANDO...' : 'ENTRAR'}
+          full
+          onClick={submit}
+          disabled={!canSubmit}
+          variant="primary"
+          activeColor={C.accent}
+        />
+
+        <p style={{ fontSize: 11, color: C.textMuted, marginTop: 12, textAlign: 'center' }}>
+          Use as credenciais definidas no ambiente ({AUTH_CONFIG.username})
+        </p>
+      </form>
+    </div>
   );
 }
 
@@ -1356,6 +1462,7 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
   const [nome, setNome] = useState(activeProject.programaNome || activeProject.name || '');
   const [dataInicio, setDataInicio] = useState(activeProject.dataInicio || new Date().toISOString().split('T')[0]);
   const [dataFim, setDataFim] = useState(activeProject.dataFim || '');
+  const [dataRotina, setDataRotina] = useState('');
   const [diaSemana, setDiaSemana] = useState('segunda');
   const [tarefaDescricao, setTarefaDescricao] = useState('');
   const [detalhes, setDetalhes] = useState('');
@@ -1363,6 +1470,11 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
   const [horaInicio, setHoraInicio] = useState('');
   const [horaFim, setHoraFim] = useState('');
   const rotinas = activeProject.rotinas || [];
+
+  useEffect(() => {
+    const weekKey = weekDayFromInputDate(dataRotina);
+    if (weekKey) setDiaSemana(weekKey);
+  }, [dataRotina]);
 
   useEffect(() => {
     if (horaInicio && horaFim) {
@@ -1393,9 +1505,11 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
 
   const adicionarRotina = () => {
     if (!tarefaDescricao.trim()) return;
+    const diaFinal = dataRotina ? (weekDayFromInputDate(dataRotina) || diaSemana) : diaSemana;
     const nova = {
       id: 'rotina-' + Date.now(),
-      diaSemana,
+      dataRotina: dataRotina || null,
+      diaSemana: diaFinal,
       tarefaDescricao: tarefaDescricao.trim(),
       detalhes: detalhes.trim(),
       tempoEstimado: parseInt(tempoEstimado) || 25,
@@ -1408,8 +1522,8 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
       ...s,
       projects: (s.projects || []).map(p => p.id === activeProject.id ? { ...p, rotinas: [...(p.rotinas || []), nova] } : p)
     }));
-    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25'); setHoraInicio(''); setHoraFim('');
-    triggerToast('Rotina adicionada. Ela gera missão automaticamente no dia certo.', 'success');
+    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25'); setHoraInicio(''); setHoraFim(''); setDataRotina('');
+    triggerToast(dataRotina ? 'Rotina datada adicionada. Ela gera missão automaticamente nesse dia.' : 'Rotina semanal adicionada. Ela gera missão automaticamente no dia certo.', 'success');
   };
 
   const removerRotina = (id) => {
@@ -2430,6 +2544,13 @@ export default function App() {
   const [mainTab, setMainTab] = useState('dashboard');
   const [projectTab, setProjectTab] = useState('hoje');
   const [toastMsg, setToastMsg] = useState(null);
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [authUser, setAuthUser] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState([]);
@@ -2475,6 +2596,85 @@ export default function App() {
 
   const triggerToast = (msg, type = 'info') => {
     setToastMsg({ msg, type });
+  };
+
+  const isValidSavedSession = (payload) => {
+    if (!payload || !payload.authenticated) return false;
+    if (!payload.expiresAt) return true;
+    return payload.expiresAt > Date.now();
+  };
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(AUTH_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (isValidSavedSession(parsed)) {
+          setIsAuthenticated(true);
+          setAuthUser(parsed.user || AUTH_CONFIG.label || 'Usuário');
+        }
+      }
+    } catch (e) {
+      // ignore malformed auth session
+    } finally {
+      setIsAuthChecking(false);
+    }
+  }, []);
+
+  const persistAuthSession = (user) => {
+    const ttlHours = Number.isFinite(AUTH_CONFIG.sessionHours) && AUTH_CONFIG.sessionHours > 0
+      ? AUTH_CONFIG.sessionHours
+      : 12;
+    const expiresAt = Date.now() + ttlHours * 60 * 60 * 1000;
+    const payload = {
+      authenticated: true,
+      user,
+      role: 'local',
+      expiresAt,
+      createdAt: Date.now()
+    };
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(payload));
+  };
+
+  const clearAuthSession = () => {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    setIsAuthenticated(false);
+    setAuthUser('');
+    setAuthError('');
+  };
+
+  const handleLogin = ({ user, password }) => {
+    setAuthBusy(true);
+    setAuthError('');
+
+    if (!user || !password) {
+      setAuthError('Informe usuário e senha.');
+      setAuthBusy(false);
+      return;
+    }
+
+    if (user === AUTH_CONFIG.username && password === AUTH_CONFIG.password) {
+      setAuthUser(user);
+      persistAuthSession(user);
+      setIsAuthenticated(true);
+      setLoading(true);
+      setAuthBusy(false);
+      return;
+    }
+
+    setAuthError('Usuário ou senha inválidos.');
+    setAuthBusy(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (isSupabaseConfigured) {
+        await supabase.auth.signOut().catch(() => {});
+      }
+    } catch (e) {}
+    clearAuthSession();
+    triggerToast('Sessão encerrada.', 'info');
+    setShowSettings(false);
   };
 
   const getLocalDateString = () => {
@@ -2559,6 +2759,11 @@ export default function App() {
 
   // State loader
   useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
     async function loadState() {
       try {
         const todayStr = getLocalDateString();
@@ -2667,11 +2872,11 @@ export default function App() {
       }
     }
     loadState();
-  }, []);
+  }, [isAuthenticated]);
 
   // State saver
   useEffect(() => {
-    if (loading) return;
+    if (!isAuthenticated || loading) return;
     const todayStr = getLocalDateString();
     
     // Save LocalStorage
@@ -2789,6 +2994,43 @@ export default function App() {
       setTimerRunning(false);
     }
   }, [state.activeProjectId, activeProject?.id, activeProject?.defaultTimer, actMissionId, actMissionTempo]);
+
+  if (isAuthChecking) {
+    return (
+      <div style={{
+        fontFamily: 'inherit', background: C.bg, minHeight: '100vh',
+        maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', color: C.text, padding: 24, boxSizing: 'border-box'
+      }}>
+        <div style={{ position: 'relative', width: 70, height: 70, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', width: '100%', height: '100%', border: `2.5px solid #222`, borderRadius: '50%' }} />
+          <div style={{
+            position: 'absolute', width: '100%', height: '100%', border: `2.5px solid transparent`,
+            borderTopColor: C.accent, borderRadius: '50%', animation: 'spin 0.8s linear infinite'
+          }} />
+          <span style={{ fontSize: 22 }}>⚡</span>
+        </div>
+        <div style={{ fontSize: 9, fontFamily: 'monospace', color: C.accent, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Sincronizando sessão</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.textMuted }}>Comando Central</div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        isLoading={authBusy}
+        error={authError}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -2998,17 +3240,30 @@ export default function App() {
           </div>
         )}
 
-        <button onClick={() => {
-          if (activeProject) {
-            setProjectTab('configurar');
-          } else {
-            setShowSettings(!showSettings);
-          }
-        }} style={{
-          background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 15
-        }}>
-          ⚙️
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => {
+            if (activeProject) {
+              setProjectTab('configurar');
+            } else {
+              setShowSettings(!showSettings);
+            }
+          }} style={{
+            background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 15
+          }}>
+            ⚙️
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: 'none', border: '1px solid rgba(239,68,68,0.45)', color: '#FCA5A5',
+              cursor: 'pointer', fontSize: 11, padding: '2px 8px', borderRadius: 6, fontFamily: 'monospace',
+              lineHeight: 1.4, fontWeight: 700
+            }}
+            title="Sair do sistema"
+          >
+            SAIR
+          </button>
+        </div>
       </div>
 
       {/* SYSTEM SETTINGS MODAL */}
