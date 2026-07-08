@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+.env*.local
+.env.bak-*
+*.bak-*
+.supabase/
+supabase/
+.git/
+.gitignore
+README.local*
