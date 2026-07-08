@@ -9,7 +9,29 @@ const AUTH_CONFIG = {
 };
 
 const DEFAULT_GUERREIRO_USER_ID = "00000000-0000-0000-0000-000000000001";
+const LUIS_GUERREIRO_USER_ID = "00000000-0000-0000-0000-000000000002";
+const LOCAL_AUTH_USERS = [
+  {
+    username: AUTH_CONFIG.username,
+    password: AUTH_CONFIG.password,
+    label: AUTH_CONFIG.label,
+    userId: DEFAULT_GUERREIRO_USER_ID
+  },
+  {
+    username: "luis",
+    password: "luis123",
+    label: "Luís",
+    userId: LUIS_GUERREIRO_USER_ID
+  }
+];
 const LOGIN_EMAIL_DOMAIN = import.meta.env.VITE_LOGIN_EMAIL_DOMAIN || "guerreiro.local";
+
+const findLocalAuthUser = (user, password) => {
+  const normalizedUser = (user || '').trim().toLowerCase();
+  return LOCAL_AUTH_USERS.find((account) =>
+    account.username.trim().toLowerCase() === normalizedUser && account.password === password
+  );
+};
 
 const toAuthEmail = (user) => {
   const normalized = (user || '').trim().toLowerCase();
@@ -2758,10 +2780,12 @@ export default function App() {
       return;
     }
 
-    if (loginUser === AUTH_CONFIG.username && password === AUTH_CONFIG.password) {
-      setAuthUser(loginUser);
-      setAuthUserId(DEFAULT_GUERREIRO_USER_ID);
-      persistAuthSession(loginUser, { userId: DEFAULT_GUERREIRO_USER_ID, role: 'local' });
+    const localAccount = findLocalAuthUser(loginUser, password);
+    if (localAccount) {
+      const displayName = localAccount.label || localAccount.username;
+      setAuthUser(displayName);
+      setAuthUserId(localAccount.userId || DEFAULT_GUERREIRO_USER_ID);
+      persistAuthSession(displayName, { userId: localAccount.userId || DEFAULT_GUERREIRO_USER_ID, role: 'local' });
       setIsAuthenticated(true);
       setLoading(true);
       setAuthBusy(false);
