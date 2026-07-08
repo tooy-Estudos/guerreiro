@@ -8,6 +8,15 @@ const AUTH_CONFIG = {
   sessionHours: Number(import.meta.env.VITE_LOGIN_SESSION_HOURS) || 12
 };
 
+const DEFAULT_GUERREIRO_USER_ID = "00000000-0000-0000-0000-000000000001";
+const LOGIN_EMAIL_DOMAIN = import.meta.env.VITE_LOGIN_EMAIL_DOMAIN || "guerreiro.local";
+
+const toAuthEmail = (user) => {
+  const normalized = (user || '').trim().toLowerCase();
+  if (!normalized) return '';
+  return normalized.includes('@') ? normalized : `${normalized}@${LOGIN_EMAIL_DOMAIN}`;
+};
+
 const AUTH_SESSION_KEY = "guerreiro_auth_session";
 
 class ErrorBoundary extends Component {
@@ -219,6 +228,11 @@ const WEEK_DAYS = [
 ];
 
 const normalizeWeekDay = (date = new Date()) => WEEK_DAYS[date.getDay()].key;
+const toLocalDateString = (date = new Date()) => {
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60 * 1000);
+  return localDate.toISOString().split('T')[0];
+};
 const dateFromInput = (value) => {
   if (!value) return null;
   const [year, month, day] = value.split('-').map(Number);
@@ -234,6 +248,63 @@ const formatInputDateBR = (value) => {
   if (!parsed) return '';
   return parsed.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
+const addLocalDays = (date, days) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+const getCronogramaWeekStartDate = (date = new Date()) => {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const mondayOffset = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - mondayOffset);
+  return d;
+};
+const getScheduleDays = (item = {}) => item.days || item.dias || [];
+const getCronogramaSlotDate = (diaIndex, date = new Date()) => toLocalDateString(addLocalDays(getCronogramaWeekStartDate(date), diaIndex));
+const getCronogramaSlotKey = (itemId, diaIndex, date = new Date()) => `${itemId}-${getCronogramaSlotDate(diaIndex, date)}`;
+const getLegacyCronogramaSlotKey = (itemId, diaIndex) => `${itemId}-${diaIndex}`;
+const isCronogramaDateKey = (key = '') => /-\d{4}-\d{2}-\d{2}$/.test(key);
+const normalizeCronogramaCheckedForCurrentWeek = (rawChecked = {}, scheduleItems = [], date = new Date()) => {
+  const normalized = {};
+  Object.entries(rawChecked || {}).forEach(([key, value]) => {
+    if (value && isCronogramaDateKey(key)) normalized[key] = true;
+  });
+  (scheduleItems || []).forEach(item => {
+    getScheduleDays(item).forEach(diaIndex => {
+      const legacyKey = getLegacyCronogramaSlotKey(item.id, diaIndex);
+      const dateKey = getCronogramaSlotKey(item.id, diaIndex, date);
+      if (rawChecked?.[legacyKey] && !normalized[dateKey]) normalized[dateKey] = true;
+    });
+  });
+  return normalized;
+};
+const countCronogramaDone = (scheduleItems = [], checked = {}, date = new Date()) => (
+  (scheduleItems || []).reduce((sum, item) => sum + getScheduleDays(item).filter(d => checked[getCronogramaSlotKey(item.id, d, date)]).length, 0)
+);
+const normalizeRoutineFrequency = (value) => {
+  const freq = String(value || '').toLowerCase();
+  if (['semanal', 'mensal', 'data'].includes(freq)) return freq;
+  if (freq.includes('mensal') || freq.includes('mes') || freq.includes('mês')) return 'mensal';
+  if (freq.includes('data') || freq.includes('unica') || freq.includes('única')) return 'data';
+  return '';
+};
+const normalizeMonthlyDay = (value) => {
+  const day = Number(value);
+  if (!Number.isFinite(day) || day < 1) return null;
+  return Math.min(31, Math.max(1, Math.round(day)));
+};
+const getRoutineFrequency = (routine = {}) => normalizeRoutineFrequency(routine.tipoRotina || routine.frequencia) || (routine.diaMes ? 'mensal' : routine.dataRotina ? 'data' : 'semanal');
+const shouldRunRoutineOnDate = (routine, date = new Date()) => {
+  if (!routine || routine.ativo === false) return false;
+  const frequency = getRoutineFrequency(routine);
+  const todayStr = toLocalDateString(date);
+  if (frequency === 'mensal') {
+    const monthlyDay = normalizeMonthlyDay(routine.diaMes || (routine.dataRotina ? dateFromInput(routine.dataRotina)?.getDate() : null));
+    return Boolean(monthlyDay) && monthlyDay === date.getDate();
+  }
+  if (frequency === 'data' || routine.dataRotina) return routine.dataRotina === todayStr;
+  return routine.diaSemana === normalizeWeekDay(date);
+};
 const isMissionClosed = (status) => ['done', 'partial', 'skipped'].includes(status);
 
 const statusMeta = (status) => {
@@ -244,13 +315,7 @@ const statusMeta = (status) => {
 };
 
 const getProjectRoutinesForToday = (project, date = new Date()) => {
-  const day = normalizeWeekDay(date);
-  const todayStr = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-  return (project?.rotinas || []).filter(r => {
-    if (r.ativo === false) return false;
-    if (r.dataRotina) return r.dataRotina === todayStr;
-    return r.diaSemana === day;
-  });
+  return (project?.rotinas || []).filter(r => shouldRunRoutineOnDate(r, date));
 };
 
 const buildMissionFromRoutine = (routine, project, todayStr) => ({
@@ -264,6 +329,9 @@ const buildMissionFromRoutine = (routine, project, todayStr) => ({
   horaInicio: routine.horaInicio || null,
   horaFim: routine.horaFim || null,
   dataRotina: routine.dataRotina || todayStr,
+  tipoRotina: getRoutineFrequency(routine),
+  diaSemana: routine.diaSemana || null,
+  diaMes: routine.diaMes || null,
   rotinaId: routine.id,
   project_id: project.id,
   created_at: `${todayStr}T00:00:00.000Z`,
@@ -523,13 +591,13 @@ function ComandoCentralOverview({ state, score, selectedPillarFilter, onPillarFi
   const projects = state.projects || [];
   const missions = state.missions || [];
   const scheduleItems = state.cronograma?.items || [];
-  const checked = state.cronograma?.weeklyChecked || {};
-  const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  const checked = normalizeCronogramaCheckedForCurrentWeek(state.cronograma?.weeklyChecked || state.cronograma?.checked || {}, scheduleItems);
+  const todayStr = toLocalDateString();
   const todayMissions = missions.filter(m => m.created_at?.startsWith(todayStr));
   const closedToday = todayMissions.filter(m => isMissionClosed(m.status));
   const baseScore = todayMissions.length ? calculateMissionScore(todayMissions) : Math.min(Math.round((score / 10) * 100), 100);
-  const totalSchedule = scheduleItems.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
-  const doneSchedule = Object.values(checked).filter(Boolean).length;
+  const totalSchedule = scheduleItems.reduce((acc, item) => acc + getScheduleDays(item).length, 0);
+  const doneSchedule = countCronogramaDone(scheduleItems, checked);
   const schedulePct = totalSchedule ? Math.round((doneSchedule / totalSchedule) * 100) : baseScore;
 
   const classify = (pct) => pct >= 90 ? 'Excelente' : pct >= 75 ? 'Muito bom' : pct >= 50 ? 'Bom' : pct > 0 ? 'Em movimento' : 'Começar hoje';
@@ -539,8 +607,8 @@ function ComandoCentralOverview({ state, score, selectedPillarFilter, onPillarFi
     const pilarMissions = missions.filter(m => pilar.aliases.includes(m.area) || pilarProjects.some(p => p.id === m.project_id));
     const pilarToday = pilarMissions.filter(m => m.created_at?.startsWith(todayStr));
     const pilarSchedule = scheduleItems.filter(i => i.pilar === pilar.id || pilarProjects.some(p => p.id === i.projectId));
-    const total = pilarToday.length || pilarSchedule.reduce((acc, item) => acc + (item.dias?.length || 0), 0);
-    const done = pilarToday.length ? pilarToday.filter(m => isMissionClosed(m.status)).length : pilarSchedule.reduce((acc, item) => acc + (item.dias || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+    const total = pilarToday.length || pilarSchedule.reduce((acc, item) => acc + getScheduleDays(item).length, 0);
+    const done = pilarToday.length ? pilarToday.filter(m => isMissionClosed(m.status)).length : countCronogramaDone(pilarSchedule, checked);
     const pct = pilarToday.length ? calculateMissionScore(pilarToday) : total ? Math.round((done / total) * 100) : 0;
     return { ...pilar, projects: pilarProjects, pct, total, done, today: pilarToday };
   });
@@ -1463,6 +1531,8 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
   const [dataInicio, setDataInicio] = useState(activeProject.dataInicio || new Date().toISOString().split('T')[0]);
   const [dataFim, setDataFim] = useState(activeProject.dataFim || '');
   const [dataRotina, setDataRotina] = useState('');
+  const [tipoRotina, setTipoRotina] = useState('semanal');
+  const [diaMes, setDiaMes] = useState(String(new Date().getDate()));
   const [diaSemana, setDiaSemana] = useState('segunda');
   const [tarefaDescricao, setTarefaDescricao] = useState('');
   const [detalhes, setDetalhes] = useState('');
@@ -1475,6 +1545,13 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
     const weekKey = weekDayFromInputDate(dataRotina);
     if (weekKey) setDiaSemana(weekKey);
   }, [dataRotina]);
+
+  useEffect(() => {
+    if (tipoRotina === 'mensal' && dataRotina) {
+      const parsed = dateFromInput(dataRotina);
+      if (parsed) setDiaMes(String(parsed.getDate()));
+    }
+  }, [tipoRotina, dataRotina]);
 
   useEffect(() => {
     if (horaInicio && horaFim) {
@@ -1505,10 +1582,16 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
 
   const adicionarRotina = () => {
     if (!tarefaDescricao.trim()) return;
+    const frequencia = normalizeRoutineFrequency(tipoRotina) || 'semanal';
+    const monthlyDay = normalizeMonthlyDay(diaMes || (dataRotina ? dateFromInput(dataRotina)?.getDate() : null));
+    if (frequencia === 'data' && !dataRotina) { triggerToast('Informe a data da rotina.', 'warning'); return; }
+    if (frequencia === 'mensal' && !monthlyDay) { triggerToast('Informe o dia do mês da rotina.', 'warning'); return; }
     const diaFinal = dataRotina ? (weekDayFromInputDate(dataRotina) || diaSemana) : diaSemana;
     const nova = {
       id: 'rotina-' + Date.now(),
-      dataRotina: dataRotina || null,
+      tipoRotina: frequencia,
+      dataRotina: frequencia === 'data' ? dataRotina : (dataRotina || null),
+      diaMes: frequencia === 'mensal' ? monthlyDay : null,
       diaSemana: diaFinal,
       tarefaDescricao: tarefaDescricao.trim(),
       detalhes: detalhes.trim(),
@@ -1522,8 +1605,8 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
       ...s,
       projects: (s.projects || []).map(p => p.id === activeProject.id ? { ...p, rotinas: [...(p.rotinas || []), nova] } : p)
     }));
-    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25'); setHoraInicio(''); setHoraFim(''); setDataRotina('');
-    triggerToast(dataRotina ? 'Rotina datada adicionada. Ela gera missão automaticamente nesse dia.' : 'Rotina semanal adicionada. Ela gera missão automaticamente no dia certo.', 'success');
+    setTarefaDescricao(''); setDetalhes(''); setTempoEstimado('25'); setHoraInicio(''); setHoraFim(''); setDataRotina(''); setTipoRotina('semanal'); setDiaMes(String(new Date().getDate()));
+    triggerToast(frequencia === 'mensal' ? 'Rotina mensal adicionada. Ela gera missão automaticamente no dia do mês.' : frequencia === 'data' ? 'Rotina datada adicionada. Ela gera missão automaticamente nesse dia.' : 'Rotina semanal adicionada. Ela gera missão automaticamente no dia certo.', 'success');
   };
 
   const removerRotina = (id) => {
@@ -1535,7 +1618,7 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
   };
 
   const gerarHoje = () => {
-    const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const todayStr = toLocalDateString();
     const routinesToday = getProjectRoutinesForToday(activeProject);
     const existing = new Set((state.missions || []).filter(m => m.project_id === activeProject.id && m.created_at?.startsWith(todayStr)).map(m => m.rotinaId || m.id));
     const generated = routinesToday.filter(r => !existing.has(r.id)).map(r => buildMissionFromRoutine(r, activeProject, todayStr));
@@ -1558,14 +1641,30 @@ function ProjectPlanejamento({ state, setState, activeProject, triggerToast }) {
       </div>
 
       <div style={{ background: C.surface, border: `1px solid ${pColor}55`, borderRadius: 14, padding: 16 }}>
-        <Label text="📅 NOVA ROTINA SEMANAL" color={pColor} />
+        <Label text="📅 NOVA ROTINA" color={pColor} />
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(100px, 1fr))', gap:10, marginBottom:10 }}>
           <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>TIPO</div>
+            <select value={tipoRotina} onChange={e => setTipoRotina(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }}>
+              <option value="semanal">Semanal</option>
+              <option value="mensal">Mensal</option>
+              <option value="data">Data única</option>
+            </select>
+          </div>
+          <div>
             <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>DIA</div>
-            <select value={diaSemana} onChange={e => setDiaSemana(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }}>
+            <select value={diaSemana} onChange={e => setDiaSemana(e.target.value)} disabled={tipoRotina === 'data'} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, opacity: tipoRotina === 'data' ? .55 : 1 }}>
               {WEEK_DAYS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
             </select>
           </div>
+          {tipoRotina === 'mensal' && <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>DIA DO MÊS</div>
+            <input type="number" min="1" max="31" value={diaMes} onChange={e => setDiaMes(e.target.value)} placeholder="1-31" style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+          </div>}
+          {(tipoRotina === 'data' || tipoRotina === 'mensal') && <div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>{tipoRotina === 'data' ? 'DATA' : 'DATA BASE'}</div>
+            <input type="date" value={dataRotina} onChange={e => setDataRotina(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
+          </div>}
           <div>
             <div style={{ fontSize: 9, color: C.textMuted, fontFamily: 'monospace', marginBottom: 4 }}>HORA INÍCIO</div>
             <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} style={{ width: '100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12 }} />
@@ -2230,8 +2329,8 @@ function ProjectConfig({ state, setState, activeProject, triggerToast }) {
 
 // ─── ABA CRONOGRAMA ───
 function TabCronograma({state, setState, toast}) {
-  const checked = state.cronograma?.weeklyChecked || {};
   const userSchedule = state.cronograma?.items || [];
+  const checked = normalizeCronogramaCheckedForCurrentWeek(state.cronograma?.weeklyChecked || state.cronograma?.checked || {}, userSchedule);
   const projects = state.projects || [];
   const pilaresById = Object.fromEntries(CRONOGRAMA_PILARES.map(p => [p.id, p]));
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
@@ -2266,24 +2365,24 @@ function TabCronograma({state, setState, toast}) {
     };
   }).sort((a,b) => (a.time || '').localeCompare(b.time || '') || (a.endTime || '').localeCompare(b.endTime || ''));
 
-  const totalSlots = enrichedSchedule.reduce((sum, item) => sum + (item.days || []).length, 0);
-  const totalDone = enrichedSchedule.reduce((sum, item) => sum + (item.days || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+  const totalSlots = enrichedSchedule.reduce((sum, item) => sum + getScheduleDays(item).length, 0);
+  const totalDone = countCronogramaDone(enrichedSchedule, checked);
   const pct = totalSlots ? Math.round((totalDone / totalSlots) * 100) : 0;
 
   const pilarStats = CRONOGRAMA_PILARES.map(p => {
     let total = 0, done = 0;
     enrichedSchedule.forEach(item => {
       if (item.pilar.id !== p.id) return;
-      total += (item.days || []).length;
-      done += (item.days || []).filter(d => checked[`${item.id}-${d}`]).length;
+      total += getScheduleDays(item).length;
+      done += countCronogramaDone([item], checked);
     });
     return { ...p, total, done, pct: total ? Math.round((done / total) * 100) : 0 };
   });
 
   const projectStats = projects.map(project => {
     const items = enrichedSchedule.filter(item => item.projectId === project.id);
-    const total = items.reduce((sum, item) => sum + (item.days || []).length, 0);
-    const done = items.reduce((sum, item) => sum + (item.days || []).filter(d => checked[`${item.id}-${d}`]).length, 0);
+    const total = items.reduce((sum, item) => sum + getScheduleDays(item).length, 0);
+    const done = countCronogramaDone(items, checked);
     return { project, total, done, pct: total ? Math.round((done / total) * 100) : 0, pilar: getPilar(project) };
   }).filter(x => x.total > 0).sort((a,b) => b.pct - a.pct);
 
@@ -2330,14 +2429,14 @@ function TabCronograma({state, setState, toast}) {
   };
 
   const toggleSlot = (item, diaIndex) => {
-    const key = `${item.id}-${diaIndex}`;
+    const key = getCronogramaSlotKey(item.id, diaIndex);
     const newChecked = { ...checked, [key]: !checked[key] };
     if (!newChecked[key]) delete newChecked[key];
     setState(s => {
       let projectsUpdated = s.projects || [];
       if (!checked[key] && item.roadmapId) {
-        const itemDoneCount = (item.days || []).filter(d => newChecked[`${item.id}-${d}`]).length;
-        const itemTotal = (item.days || []).length;
+        const itemDoneCount = countCronogramaDone([item], newChecked);
+        const itemTotal = getScheduleDays(item).length;
         projectsUpdated = projectsUpdated.map(project => {
           if (project.id !== item.projectId) return project;
           const roadmap = (project.roadmap || []).map(r => r.id === item.roadmapId ? {
@@ -2352,7 +2451,7 @@ function TabCronograma({state, setState, toast}) {
     });
     if (!checked[key]) {
       toast(`${item.pilar.icon} ${item.titulo} concluído no dia. Projeto avançou.`);
-      const doneNow = Object.keys(newChecked).length;
+      const doneNow = countCronogramaDone(enrichedSchedule, newChecked);
       if (totalSlots > 0 && doneNow === totalSlots) {
         setShowCelebration(true);
         toast('🏆 CRONOGRAMA GERAL COMPLETO! Todos os projetos avançaram.');
@@ -2451,11 +2550,11 @@ function TabCronograma({state, setState, toast}) {
               <div key={t} style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', borderTop:`1px solid ${C.border}` }}>
                 <div style={{ padding:10, color:C.text, fontSize:11, fontWeight:800, fontFamily:'monospace', background:'#0F172A', borderRight:`1px solid ${C.border}` }}>{t}</div>
                 {CRONOGRAMA_DIAS.map((d, di) => {
-                  const dayItems = itemsAtTime.filter(item => (item.days || []).includes(di));
+                  const dayItems = itemsAtTime.filter(item => getScheduleDays(item).includes(di));
                   return (
                     <div key={d} style={{minHeight:78, padding:6, borderRight:`1px solid ${C.border}`, background: dayItems.length ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.01)'}}>
                       {dayItems.map(item => {
-                        const done = checked[`${item.id}-${di}`];
+                        const done = checked[getCronogramaSlotKey(item.id, di)];
                         return <div key={item.id} onClick={() => toggleSlot(item, di)} style={{padding:7, borderRadius:9, marginBottom:5, cursor:'pointer', border:`1px solid ${item.pilar.cor}55`, background:done?`${item.pilar.cor}2E`:`${item.pilar.cor}12`}}>
                           <div style={{display:'flex', justifyContent:'space-between', gap:4, alignItems:'flex-start'}}>
                             <span style={{fontSize:9, fontFamily:'monospace', fontWeight:900, color:done?item.pilar.cor:C.text}}>{item.titulo}</span>
@@ -2550,13 +2649,14 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authUser, setAuthUser] = useState('');
+  const [authUserId, setAuthUserId] = useState(DEFAULT_GUERREIRO_USER_ID);
 
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [history, setHistory] = useState([]);
   
   const [state, setState] = useState({
-    cronograma: { checked: {} },
+    cronograma: { items: [], weeklyChecked: {} },
     projects: [],
     activeProjectId: null,
     missions: [],
@@ -2612,6 +2712,7 @@ export default function App() {
         if (isValidSavedSession(parsed)) {
           setIsAuthenticated(true);
           setAuthUser(parsed.user || AUTH_CONFIG.label || 'Usuário');
+          setAuthUserId(parsed.userId || DEFAULT_GUERREIRO_USER_ID);
         }
       }
     } catch (e) {
@@ -2621,7 +2722,7 @@ export default function App() {
     }
   }, []);
 
-  const persistAuthSession = (user) => {
+  const persistAuthSession = (user, meta = {}) => {
     const ttlHours = Number.isFinite(AUTH_CONFIG.sessionHours) && AUTH_CONFIG.sessionHours > 0
       ? AUTH_CONFIG.sessionHours
       : 12;
@@ -2629,7 +2730,9 @@ export default function App() {
     const payload = {
       authenticated: true,
       user,
-      role: 'local',
+      userId: meta.userId || DEFAULT_GUERREIRO_USER_ID,
+      role: meta.role || 'local',
+      email: meta.email || null,
       expiresAt,
       createdAt: Date.now()
     };
@@ -2640,26 +2743,55 @@ export default function App() {
     localStorage.removeItem(AUTH_SESSION_KEY);
     setIsAuthenticated(false);
     setAuthUser('');
+    setAuthUserId(DEFAULT_GUERREIRO_USER_ID);
     setAuthError('');
   };
 
-  const handleLogin = ({ user, password }) => {
+  const handleLogin = async ({ user, password }) => {
     setAuthBusy(true);
     setAuthError('');
+    const loginUser = (user || '').trim();
 
-    if (!user || !password) {
+    if (!loginUser || !password) {
       setAuthError('Informe usuário e senha.');
       setAuthBusy(false);
       return;
     }
 
-    if (user === AUTH_CONFIG.username && password === AUTH_CONFIG.password) {
-      setAuthUser(user);
-      persistAuthSession(user);
+    if (loginUser === AUTH_CONFIG.username && password === AUTH_CONFIG.password) {
+      setAuthUser(loginUser);
+      setAuthUserId(DEFAULT_GUERREIRO_USER_ID);
+      persistAuthSession(loginUser, { userId: DEFAULT_GUERREIRO_USER_ID, role: 'local' });
       setIsAuthenticated(true);
       setLoading(true);
       setAuthBusy(false);
       return;
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: toAuthEmail(loginUser),
+          password
+        });
+
+        if (!error && data?.user) {
+          const displayName = data.user.user_metadata?.username || data.user.user_metadata?.name || loginUser;
+          setAuthUser(displayName);
+          setAuthUserId(data.user.id || DEFAULT_GUERREIRO_USER_ID);
+          persistAuthSession(displayName, {
+            userId: data.user.id || DEFAULT_GUERREIRO_USER_ID,
+            role: 'supabase',
+            email: data.user.email || null
+          });
+          setIsAuthenticated(true);
+          setLoading(true);
+          setAuthBusy(false);
+          return;
+        }
+      } catch (e) {
+        console.error('Supabase auth err:', e);
+      }
     }
 
     setAuthError('Usuário ou senha inválidos.');
@@ -2754,6 +2886,14 @@ export default function App() {
         }));
       }
     }
+    parsed.cronograma = parsed.cronograma || { items: [], weeklyChecked: {} };
+    parsed.cronograma.items = parsed.cronograma.items || [];
+    const rawCronogramaChecked = {
+      ...(parsed.cronograma.checked || {}),
+      ...(parsed.cronograma.weeklyChecked || {})
+    };
+    parsed.cronograma.weeklyChecked = normalizeCronogramaCheckedForCurrentWeek(rawCronogramaChecked, parsed.cronograma.items);
+    delete parsed.cronograma.checked;
     return parsed;
   };
 
@@ -2764,12 +2904,17 @@ export default function App() {
       return;
     }
 
+    const activeUserId = authUserId || DEFAULT_GUERREIRO_USER_ID;
+    const stateStorageKey = `guerreiro_state_${activeUserId}`;
+    const historyStorageKey = `guerreiro_history_${activeUserId}`;
+    const useLegacyLocalStorage = activeUserId === DEFAULT_GUERREIRO_USER_ID;
+
     async function loadState() {
+      setLoading(true);
+      const todayStr = getLocalDateString();
       try {
-        const todayStr = getLocalDateString();
-        
-        // LocalStorage fallback load
-        const localData = localStorage.getItem('guerreiro_state');
+        // LocalStorage first (instant)
+        const localData = localStorage.getItem(stateStorageKey) || (useLegacyLocalStorage ? localStorage.getItem('guerreiro_state') : null);
         if (localData) {
           try {
             let parsed = JSON.parse(localData);
@@ -2782,7 +2927,7 @@ export default function App() {
           }
         }
 
-        const localHistData = localStorage.getItem('guerreiro_history');
+        const localHistData = localStorage.getItem(historyStorageKey) || (useLegacyLocalStorage ? localStorage.getItem('guerreiro_history') : null);
         let hasLocalToday = false;
         if (localHistData) {
           try {
@@ -2805,6 +2950,7 @@ export default function App() {
         const { data, error } = await supabase
           .from('guerreiro_daily_states')
           .select('state')
+          .eq('user_id', activeUserId)
           .eq('date', todayStr)
           .maybeSingle();
 
@@ -2813,6 +2959,7 @@ export default function App() {
         const { data: histData } = await supabase
           .from('guerreiro_daily_states')
           .select('date, state')
+          .eq('user_id', activeUserId)
           .order('date', { ascending: false })
           .limit(30);
 
@@ -2827,6 +2974,7 @@ export default function App() {
           const { data: prevData, error: prevError } = await supabase
             .from('guerreiro_daily_states')
             .select('date, state')
+            .eq('user_id', activeUserId)
             .lt('date', todayStr)
             .order('date', { ascending: false })
             .limit(1)
@@ -2858,6 +3006,7 @@ export default function App() {
               eusSaved: false,
               conversion: migratedPrev.conversion || { consumidos: 0, aplicados: 0 },
               panel: migratedPrev.panel || { fe: 3, familia: 3, saude: 3, estudo: 3, carreira: 3 },
+              cronograma: migratedPrev.cronograma || { items: [], weeklyChecked: {} },
               customPrinciples: migratedPrev.customPrinciples || prev.customPrinciples,
               customAnchors: migratedPrev.customAnchors || prev.customAnchors,
               constitutionChecks: {},
@@ -2872,27 +3021,30 @@ export default function App() {
       }
     }
     loadState();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authUserId]);
 
   // State saver
   useEffect(() => {
     if (!isAuthenticated || loading) return;
     const todayStr = getLocalDateString();
+    const activeUserId = authUserId || DEFAULT_GUERREIRO_USER_ID;
+    const stateStorageKey = `guerreiro_state_${activeUserId}`;
+    const historyStorageKey = `guerreiro_history_${activeUserId}`;
     
     // Save LocalStorage
-    const stateToSave = state;
-    localStorage.setItem('guerreiro_state', JSON.stringify(stateToSave));
+    const stateToSave = migrateLegacyState({ ...state, cronograma: { ...(state.cronograma || {}) } });
+    localStorage.setItem(stateStorageKey, JSON.stringify(stateToSave));
 
     let localHist = [];
     try {
-      const stored = localStorage.getItem('guerreiro_history');
+      const stored = localStorage.getItem(historyStorageKey);
       localHist = stored ? JSON.parse(stored) : [];
     } catch (e) {}
     localHist = [
       { date: todayStr, state: stateToSave },
       ...localHist.filter(h => h.date !== todayStr)
     ].slice(0, 30);
-    localStorage.setItem('guerreiro_history', JSON.stringify(localHist));
+    localStorage.setItem(historyStorageKey, JSON.stringify(localHist));
 
     // Save Supabase
     if (!isSupabaseConfigured) return;
@@ -2902,17 +3054,18 @@ export default function App() {
         await supabase
           .from('guerreiro_daily_states')
           .upsert({
+            user_id: activeUserId,
             date: todayStr,
             state: stateToSave,
             updated_at: new Date().toISOString()
-          });
+          }, { onConflict: 'user_id,date' });
       } catch (err) {
         console.error('Supabase save err:', err);
       }
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [state, loading]);
+  }, [state, loading, authUserId]);
 
   // Global Timer Tick logic
   useEffect(() => {
