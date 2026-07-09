@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Component } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { mergeLuisPrumoState } from "./luisPrumoSeed";
 
 const AUTH_CONFIG = {
   username: (import.meta.env.VITE_LOGIN_USER || import.meta.env.VITE_APP_USER || "admin").trim(),
@@ -2859,7 +2860,7 @@ export default function App() {
     return dates;
   };
 
-  const migrateLegacyState = (parsed) => {
+  const migrateLegacyState = (parsed, userId = null) => {
     if (!parsed) return parsed;
     parsed.programas = parsed.programas || [];
     parsed.execucoes = parsed.execucoes || [];
@@ -2918,7 +2919,7 @@ export default function App() {
     };
     parsed.cronograma.weeklyChecked = normalizeCronogramaCheckedForCurrentWeek(rawCronogramaChecked, parsed.cronograma.items);
     delete parsed.cronograma.checked;
-    return parsed;
+    return userId === LUIS_GUERREIRO_USER_ID ? mergeLuisPrumoState(parsed) : parsed;
   };
 
   // State loader
@@ -2943,7 +2944,7 @@ export default function App() {
           try {
             let parsed = JSON.parse(localData);
             if (parsed) {
-              parsed = migrateLegacyState(parsed);
+              parsed = migrateLegacyState(parsed, activeUserId);
               setState(prev => ({ ...prev, ...parsed }));
             }
           } catch (e) {
@@ -2991,7 +2992,7 @@ export default function App() {
 
         if (data && data.state) {
           let loaded = data.state;
-          loaded = migrateLegacyState(loaded);
+          loaded = migrateLegacyState(loaded, activeUserId);
           setState(prev => ({ ...prev, ...loaded }));
         } else if (!hasLocalToday) {
           // New day load previous stats (only if we don't have today's state locally yet)
@@ -3011,7 +3012,7 @@ export default function App() {
             const yesterdayWasSuccessful = prevData.state.flags?.naoZerou || prevData.state.modoMinimo || prevData.state.flags?.acao;
             const newStreak = (diff === 1 && yesterdayWasSuccessful) ? (prevData.state.streak || 0) : 0;
             
-            const migratedPrev = migrateLegacyState(prevData.state);
+            const migratedPrev = migrateLegacyState(prevData.state, activeUserId);
 
             setState(prev => ({
               ...prev,
@@ -3041,6 +3042,9 @@ export default function App() {
         console.error('Supabase load err:', err);
         triggerToast('Dados locais carregados.', 'info');
       } finally {
+        if (activeUserId === LUIS_GUERREIRO_USER_ID) {
+          setState(prev => mergeLuisPrumoState(prev));
+        }
         setLoading(false);
       }
     }
@@ -3056,7 +3060,7 @@ export default function App() {
     const historyStorageKey = `guerreiro_history_${activeUserId}`;
     
     // Save LocalStorage
-    const stateToSave = migrateLegacyState({ ...state, cronograma: { ...(state.cronograma || {}) } });
+    const stateToSave = migrateLegacyState({ ...state, cronograma: { ...(state.cronograma || {}) } }, activeUserId);
     localStorage.setItem(stateStorageKey, JSON.stringify(stateToSave));
 
     let localHist = [];
