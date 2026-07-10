@@ -304,6 +304,95 @@ const normalizeCronogramaCheckedForCurrentWeek = (rawChecked = {}, scheduleItems
 const countCronogramaDone = (scheduleItems = [], checked = {}, date = new Date()) => (
   (scheduleItems || []).reduce((sum, item) => sum + getScheduleDays(item).filter(d => checked[getCronogramaSlotKey(item.id, d, date)]).length, 0)
 );
+const CRONOGRAMA_DAY_KEY_TO_INDEX = {
+  segunda: 0,
+  terca: 1,
+  terça: 1,
+  quarta: 2,
+  quinta: 3,
+  sexta: 4,
+  sabado: 5,
+  sábado: 5,
+  domingo: 6
+};
+const getCronogramaWeekValue = (date = new Date()) => toLocalDateString(getCronogramaWeekStartDate(date));
+const getCronogramaWeekEndDate = (date = new Date()) => addLocalDays(getCronogramaWeekStartDate(date), 6);
+const formatCronogramaDayShort = (date) => date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+const formatCronogramaWeekRange = (date = new Date()) => {
+  const start = getCronogramaWeekStartDate(date);
+  const end = getCronogramaWeekEndDate(start);
+  return `${formatCronogramaDayShort(start)} a ${formatCronogramaDayShort(end)}`;
+};
+const addCronogramaWeekOption = (map, date, selectedValue = '', todayValue = getCronogramaWeekValue()) => {
+  if (!date || Number.isNaN(date.getTime?.())) return;
+  const start = getCronogramaWeekStartDate(date);
+  const value = getCronogramaWeekValue(start);
+  const suffix = value === todayValue ? ' • atual' : value === selectedValue ? ' • selecionada' : '';
+  map.set(value, { value, label: `${formatCronogramaWeekRange(start)}${suffix}` });
+};
+const buildCronogramaWeekOptions = (projects = [], selectedValue = '') => {
+  const map = new Map();
+  const todayValue = getCronogramaWeekValue();
+  addCronogramaWeekOption(map, new Date(), selectedValue, todayValue);
+  if (selectedValue) addCronogramaWeekOption(map, dateFromInput(selectedValue), selectedValue, todayValue);
+
+  (projects || []).forEach(project => {
+    const start = dateFromInput(project?.dataInicio);
+    const end = dateFromInput(project?.dataFim || project?.target);
+    if (start && end && end >= start) {
+      const daysBetween = Math.round((end - start) / (1000 * 60 * 60 * 24));
+      if (daysBetween <= 370) {
+        for (let cursor = getCronogramaWeekStartDate(start); cursor <= end; cursor = addLocalDays(cursor, 7)) {
+          addCronogramaWeekOption(map, cursor, selectedValue, todayValue);
+        }
+      } else {
+        addCronogramaWeekOption(map, start, selectedValue, todayValue);
+        addCronogramaWeekOption(map, end, selectedValue, todayValue);
+      }
+    } else {
+      addCronogramaWeekOption(map, start, selectedValue, todayValue);
+      addCronogramaWeekOption(map, end, selectedValue, todayValue);
+    }
+
+    (project?.rotinas || []).forEach(routine => {
+      addCronogramaWeekOption(map, dateFromInput(routine?.dataRotina), selectedValue, todayValue);
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
+};
+const getRoutineScheduleDaysForWeek = (routine, weekStartDate = new Date()) => {
+  const days = [];
+  for (let index = 0; index < 7; index += 1) {
+    const date = addLocalDays(getCronogramaWeekStartDate(weekStartDate), index);
+    if (shouldRunRoutineOnDate(routine, date)) days.push(index);
+  }
+  if (days.length) return days;
+  const fallbackIndex = CRONOGRAMA_DAY_KEY_TO_INDEX[routine?.diaSemana];
+  return Number.isInteger(fallbackIndex) ? [fallbackIndex] : [];
+};
+const buildRoutineScheduleItemsForWeek = (projects = [], weekStartDate = new Date()) => (
+  (projects || []).flatMap(project => (project?.rotinas || []).map((routine, index) => {
+    if (!routine || routine.ativo === false) return null;
+    const days = getRoutineScheduleDaysForWeek(routine, weekStartDate);
+    if (!days.length) return null;
+    const time = routine.horaInicio || '00:00';
+    return {
+      id: `rot-${project.id}-${routine.id || index}`,
+      projectId: project.id,
+      roadmapId: null,
+      title: routine.tarefaDescricao || routine.titulo || project.name,
+      time,
+      endTime: routine.horaFim || '',
+      days,
+      source: 'rotina',
+      routineId: routine.id,
+      untimed: !routine.horaInicio,
+      details: routine.detalhes || routine.prova || '',
+      created_at: routine.created_at || project.created_at || new Date().toISOString()
+    };
+  }).filter(Boolean))
+);
 const normalizeRoutineFrequency = (value) => {
   const freq = String(value || '').toLowerCase();
   if (['semanal', 'mensal', 'data'].includes(freq)) return freq;
@@ -2353,11 +2442,22 @@ function ProjectConfig({ state, setState, activeProject, triggerToast }) {
 // ─── ABA CRONOGRAMA ───
 function TabCronograma({state, setState, toast}) {
   const userSchedule = state.cronograma?.items || [];
-  const checked = normalizeCronogramaCheckedForCurrentWeek(state.cronograma?.weeklyChecked || state.cronograma?.checked || {}, userSchedule);
   const projects = state.projects || [];
   const pilaresById = Object.fromEntries(CRONOGRAMA_PILARES.map(p => [p.id, p]));
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
   const selectedProject = projects.find(p => p.id === projectId) || projects[0] || null;
+  const [filterProjectId, setFilterProjectId] = useState('all');
+  const [selectedWeek, setSelectedWeek] = useState(getCronogramaWeekValue());
+  const selectedWeekStart = dateFromInput(selectedWeek) || getCronogramaWeekStartDate();
+  const selectedWeekDays = CRONOGRAMA_DIAS.map((label, index) => ({
+    label,
+    date: addLocalDays(selectedWeekStart, index),
+    dateLabel: formatCronogramaDayShort(addLocalDays(selectedWeekStart, index))
+  }));
+  const projectsForWeekOptions = filterProjectId === 'all'
+    ? projects
+    : projects.filter(project => project.id === filterProjectId);
+  const weekOptions = buildCronogramaWeekOptions(projectsForWeekOptions.length ? projectsForWeekOptions : projects, selectedWeek);
   const [roadmapId, setRoadmapId] = useState('');
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('06:00');
@@ -2367,29 +2467,40 @@ function TabCronograma({state, setState, toast}) {
 
   useEffect(() => {
     if (!projectId && projects[0]?.id) setProjectId(projects[0].id);
-  }, [projects, projectId]);
+    if (filterProjectId !== 'all' && !projects.some(p => p.id === filterProjectId)) setFilterProjectId('all');
+  }, [projects, projectId, filterProjectId]);
 
   const getPilar = (project) => {
     const pilarId = project?.pilarId || 'trabalho';
     return pilaresById[pilarId] || CRONOGRAMA_PILARES[2];
   };
 
-  const enrichedSchedule = userSchedule.map(item => {
+  const allScheduleItems = [
+    ...userSchedule.map(item => ({ ...item, source: item.source || 'cronograma' })),
+    ...buildRoutineScheduleItemsForWeek(projects, selectedWeekStart)
+  ];
+  const checked = normalizeCronogramaCheckedForCurrentWeek(state.cronograma?.weeklyChecked || state.cronograma?.checked || {}, allScheduleItems, selectedWeekStart);
+
+  const enrichedSchedule = allScheduleItems.map(item => {
     const project = projects.find(p => p.id === item.projectId);
     const roadmap = (project?.roadmap || []).find(r => r.id === item.roadmapId);
     const pilar = getPilar(project);
+    const isRoutine = item.source === 'rotina';
     return {
       ...item,
       project,
       roadmap,
       pilar,
       titulo: item.title || roadmap?.title || project?.name || 'Bloco sem nome',
-      detalhe: project ? `${project.name}${roadmap?.title ? ' → ' + roadmap.title : ''}` : 'Projeto removido'
+      detalhe: project
+        ? `${project.name}${isRoutine ? ' → rotina da semana' : roadmap?.title ? ' → ' + roadmap.title : ''}${item.details ? ' • ' + item.details : ''}`
+        : 'Projeto removido'
     };
-  }).sort((a,b) => (a.time || '').localeCompare(b.time || '') || (a.endTime || '').localeCompare(b.endTime || ''));
+  }).filter(item => filterProjectId === 'all' || item.projectId === filterProjectId)
+    .sort((a,b) => (a.time || '').localeCompare(b.time || '') || (a.endTime || '').localeCompare(b.endTime || ''));
 
   const totalSlots = enrichedSchedule.reduce((sum, item) => sum + getScheduleDays(item).length, 0);
-  const totalDone = countCronogramaDone(enrichedSchedule, checked);
+  const totalDone = countCronogramaDone(enrichedSchedule, checked, selectedWeekStart);
   const pct = totalSlots ? Math.round((totalDone / totalSlots) * 100) : 0;
 
   const pilarStats = CRONOGRAMA_PILARES.map(p => {
@@ -2397,7 +2508,7 @@ function TabCronograma({state, setState, toast}) {
     enrichedSchedule.forEach(item => {
       if (item.pilar.id !== p.id) return;
       total += getScheduleDays(item).length;
-      done += countCronogramaDone([item], checked);
+      done += countCronogramaDone([item], checked, selectedWeekStart);
     });
     return { ...p, total, done, pct: total ? Math.round((done / total) * 100) : 0 };
   });
@@ -2405,7 +2516,7 @@ function TabCronograma({state, setState, toast}) {
   const projectStats = projects.map(project => {
     const items = enrichedSchedule.filter(item => item.projectId === project.id);
     const total = items.reduce((sum, item) => sum + getScheduleDays(item).length, 0);
-    const done = countCronogramaDone(items, checked);
+    const done = countCronogramaDone(items, checked, selectedWeekStart);
     return { project, total, done, pct: total ? Math.round((done / total) * 100) : 0, pilar: getPilar(project) };
   }).filter(x => x.total > 0).sort((a,b) => b.pct - a.pct);
 
@@ -2452,13 +2563,13 @@ function TabCronograma({state, setState, toast}) {
   };
 
   const toggleSlot = (item, diaIndex) => {
-    const key = getCronogramaSlotKey(item.id, diaIndex);
+    const key = getCronogramaSlotKey(item.id, diaIndex, selectedWeekStart);
     const newChecked = { ...checked, [key]: !checked[key] };
     if (!newChecked[key]) delete newChecked[key];
     setState(s => {
       let projectsUpdated = s.projects || [];
       if (!checked[key] && item.roadmapId) {
-        const itemDoneCount = countCronogramaDone([item], newChecked);
+        const itemDoneCount = countCronogramaDone([item], newChecked, selectedWeekStart);
         const itemTotal = getScheduleDays(item).length;
         projectsUpdated = projectsUpdated.map(project => {
           if (project.id !== item.projectId) return project;
@@ -2473,15 +2584,18 @@ function TabCronograma({state, setState, toast}) {
       return { ...s, projects: projectsUpdated, cronograma: { ...(s.cronograma || {}), weeklyChecked: newChecked } };
     });
     if (!checked[key]) {
-      toast(`${item.pilar.icon} ${item.titulo} concluído no dia. Projeto avançou.`);
-      const doneNow = countCronogramaDone(enrichedSchedule, newChecked);
+      toast(`${item.pilar.icon} ${item.titulo} concluído em ${formatInputDateBR(getCronogramaSlotDate(diaIndex, selectedWeekStart))}. Projeto avançou.`);
+      const doneNow = countCronogramaDone(enrichedSchedule, newChecked, selectedWeekStart);
       if (totalSlots > 0 && doneNow === totalSlots) {
         setShowCelebration(true);
-        toast('🏆 CRONOGRAMA GERAL COMPLETO! Todos os projetos avançaram.');
+        toast('🏆 CRONOGRAMA DA SEMANA COMPLETO! Todos os blocos filtrados avançaram.');
         setTimeout(() => setShowCelebration(false), 2800);
       }
     }
   };
+
+  const goToWeek = (direction) => setSelectedWeek(getCronogramaWeekValue(addLocalDays(selectedWeekStart, direction * 7)));
+  const goToCurrentWeek = () => setSelectedWeek(getCronogramaWeekValue());
 
   const times = [...new Set(enrichedSchedule.map(i => i.time))].sort();
 
@@ -2503,7 +2617,23 @@ function TabCronograma({state, setState, toast}) {
       <SpotlightCard style={{ background:'linear-gradient(135deg,#101828,#0D1F35)', border:`1px solid ${C.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
         <Label text="📋 CRONOGRAMA GERAL DOS PROJETOS" color={C.gold} />
         <div style={{fontSize:12, color:C.textMuted, lineHeight:1.5, marginBottom:12}}>
-          Você monta o cronograma a partir dos seus projetos e ramificações. A evolução geral é calculada pelo cumprimento dos blocos agendados de todos os projetos, não por um modelo fixo.
+          Você escolhe a semana e pode filtrar por projeto. A evolução exibida abaixo é calculada apenas pelos blocos/rotinas da semana selecionada.
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr auto auto auto', gap:8, marginBottom:12, alignItems:'stretch'}}>
+          <select aria-label="Filtrar projeto no cronograma" value={filterProjectId} onChange={e=>setFilterProjectId(e.target.value)} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, minWidth:0}}>
+            <option value="all">🎯 Todos os projetos</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.emoji || '📁'} {p.name}</option>)}
+          </select>
+          <select aria-label="Escolher semana do cronograma" value={selectedWeek} onChange={e=>setSelectedWeek(e.target.value)} style={{background:'#111827', border:`1px solid ${C.border}`, borderRadius:10, color:C.text, padding:12, minWidth:0}}>
+            {weekOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <button onClick={()=>goToWeek(-1)} title="Semana anterior" style={{border:`1px solid ${C.border}`, background:'#111827', color:C.text, borderRadius:10, padding:'0 12px', fontWeight:900}}>←</button>
+          <button onClick={goToCurrentWeek} title="Voltar para semana atual" style={{border:`1px solid ${C.accent}66`, background:`${C.accent}18`, color:C.accent, borderRadius:10, padding:'0 12px', fontWeight:900, fontSize:10}}>HOJE</button>
+          <button onClick={()=>goToWeek(1)} title="Próxima semana" style={{border:`1px solid ${C.border}`, background:'#111827', color:C.text, borderRadius:10, padding:'0 12px', fontWeight:900}}>→</button>
+        </div>
+        <div style={{display:'flex', justifyContent:'space-between', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:12, fontSize:10, color:C.textMuted, fontFamily:'monospace'}}>
+          <span>SEMANA: <b style={{color:C.text}}>{formatCronogramaWeekRange(selectedWeekStart)}</b></span>
+          <span>{filterProjectId === 'all' ? 'todos os projetos' : (projects.find(p => p.id === filterProjectId)?.name || 'projeto filtrado')}</span>
         </div>
         <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:10}}>
           <div style={{fontSize:30, color:C.text, fontFamily:'Georgia,serif'}}>{pct}%</div>
@@ -2564,20 +2694,20 @@ function TabCronograma({state, setState, toast}) {
         <div style={{ minWidth: 900 }}>
           <div style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', position:'sticky', top:0, zIndex:2 }}>
             <div style={{ padding:10, background:'#111827', color:C.gold, fontSize:10, fontWeight:800, fontFamily:'monospace', borderRight:`1px solid ${C.border}` }}>HORÁRIO</div>
-            {CRONOGRAMA_DIAS.map(d => <div key={d} style={{ padding:10, background:'#111827', color:C.text, fontSize:10, fontWeight:800, fontFamily:'monospace', textAlign:'center', borderRight:`1px solid ${C.border}` }}>{d}</div>)}
+            {selectedWeekDays.map(({ label, dateLabel }) => <div key={label} style={{ padding:10, background:'#111827', color:C.text, fontSize:10, fontWeight:800, fontFamily:'monospace', textAlign:'center', borderRight:`1px solid ${C.border}` }}><div>{label}</div><div style={{fontSize:9, color:C.textMuted, marginTop:2}}>{dateLabel}</div></div>)}
           </div>
-          {times.length === 0 && <div style={{padding:28, color:C.textMuted, textAlign:'center', fontSize:12, fontFamily:'monospace'}}>Seu cronograma ainda está vazio. Adicione blocos acima com base nos seus projetos.</div>}
+          {times.length === 0 && <div style={{padding:28, color:C.textMuted, textAlign:'center', fontSize:12, fontFamily:'monospace'}}>Nenhum bloco encontrado para este projeto nesta semana. Troque o filtro ou escolha outra semana.</div>}
           {times.map(t => {
             const itemsAtTime = enrichedSchedule.filter(item => item.time === t);
             return (
               <div key={t} style={{ display:'grid', gridTemplateColumns:'74px repeat(7, 1fr)', borderTop:`1px solid ${C.border}` }}>
                 <div style={{ padding:10, color:C.text, fontSize:11, fontWeight:800, fontFamily:'monospace', background:'#0F172A', borderRight:`1px solid ${C.border}` }}>{t}</div>
-                {CRONOGRAMA_DIAS.map((d, di) => {
+                {selectedWeekDays.map(({ label }, di) => {
                   const dayItems = itemsAtTime.filter(item => getScheduleDays(item).includes(di));
                   return (
-                    <div key={d} style={{minHeight:78, padding:6, borderRight:`1px solid ${C.border}`, background: dayItems.length ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.01)'}}>
+                    <div key={label} style={{minHeight:78, padding:6, borderRight:`1px solid ${C.border}`, background: dayItems.length ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.01)'}}>
                       {dayItems.map(item => {
-                        const done = checked[getCronogramaSlotKey(item.id, di)];
+                        const done = checked[getCronogramaSlotKey(item.id, di, selectedWeekStart)];
                         return <div key={item.id} onClick={() => toggleSlot(item, di)} style={{padding:7, borderRadius:9, marginBottom:5, cursor:'pointer', border:`1px solid ${item.pilar.cor}55`, background:done?`${item.pilar.cor}2E`:`${item.pilar.cor}12`}}>
                           <div style={{display:'flex', justifyContent:'space-between', gap:4, alignItems:'flex-start'}}>
                             <span style={{fontSize:9, fontFamily:'monospace', fontWeight:900, color:done?item.pilar.cor:C.text}}>{item.titulo}</span>
@@ -2585,7 +2715,7 @@ function TabCronograma({state, setState, toast}) {
                           </div>
                           <div style={{fontSize:8, color:item.pilar.cor, fontWeight:900, fontFamily:'monospace', marginTop:4}}>⏰ {formatTimeRange(item)}</div>
                           <div style={{fontSize:8.5, color:C.textMuted, lineHeight:1.35, marginTop:4}}>{item.detalhe}</div>
-                          <button onClick={(e)=>{e.stopPropagation(); removeScheduleItem(item.id);}} style={{marginTop:5, background:'transparent', border:'none', color:C.textMuted, fontSize:8, padding:0, cursor:'pointer'}}>remover</button>
+                          {item.source !== 'rotina' && <button onClick={(e)=>{e.stopPropagation(); removeScheduleItem(item.id);}} style={{marginTop:5, background:'transparent', border:'none', color:C.textMuted, fontSize:8, padding:0, cursor:'pointer'}}>remover</button>}
                         </div>;
                       })}
                     </div>
